@@ -1,0 +1,134 @@
+function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t } = useApp();
+  return (
+    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
+      <NavBar role="panchayat" screen="panchayat-dashboard" onNav={onNav} />
+      <div className="px-4 pt-5 pb-4" style={{ background: "var(--nav-bg)" }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs" style={{ color: "rgba(255,255,255,0.55)" }}>Mukhiya / Sarpanch</p>
+            <h1 className="text-xl font-black text-white">Piska Nagri Panchayat</h1>
+            <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>Kanke Block, Ranchi</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+            style={{ background: "rgba(255,255,255,0.1)" }}>
+            <Building2 size={24} color="var(--amber)" />
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-3xl mx-auto px-4 py-5 space-y-5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { icon: <Layers size={18} />, label: "Total Problems", value: "34", color: "var(--navy)" },
+            { icon: <Clock size={18} />, label: "Pending Verify", value: "8", color: "var(--warning)" },
+            { icon: <Activity size={18} />, label: "In Progress", value: "12", color: "var(--green)" },
+            { icon: <CheckCircle size={18} />, label: "Resolved", value: "14", color: "var(--success)" },
+          ].map(k => <KPICard key={k.label} {...k} />)}
+        </div>
+
+        <h2 className="font-bold text-sm" style={{ color: "var(--text)" }}>Primary Actions</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[
+            { icon: <FileText size={20} />, label: t("cit.report"), sub: "Report a new village problem", screen: "report-step1" as Screen, color: "var(--amber)", bg: "var(--amber)" },
+            { icon: <UserCheck size={20} />, label: t("panch.behalf"), sub: "Submit on behalf of a citizen", screen: "report-for-someone" as Screen, color: "var(--green)", bg: "var(--success-bg)", cardBg: "#F0FDF4", borderColor: "var(--green)" },
+            { icon: <CheckCircle size={20} />, label: t("panch.verify"), sub: "Verify submitted problems", screen: "govt-validation" as Screen, color: "var(--navy)", bg: "#EFF6FF" },
+            { icon: <Map size={20} />, label: t("panch.village"), sub: "See all village problems", screen: "problems-near-me" as Screen, color: "#7C3AED", bg: "#EDE9FE" },
+            { icon: <Activity size={20} />, label: t("panch.trackproject"), sub: "Track active projects", screen: "project-lifecycle" as Screen, color: "#B45309", bg: "var(--warning-bg)" },
+          ].map(a => (
+            <button key={a.label} onClick={() => onNav(a.screen)}
+              className="p-4 rounded-xl border-2 flex items-center gap-3 text-left transition-all card-hover active:scale-95"
+              style={{ background: (a as any).cardBg || "var(--card)", borderColor: (a as any).borderColor || "var(--border)" }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: a.bg, color: a.bg === "var(--amber)" ? "var(--navy)" : a.color }}>
+                {a.icon}
+              </div>
+              <div>
+                <div className="font-semibold text-sm" style={{ color: "var(--text)" }}>{a.label}</div>
+                <div className="text-xs" style={{ color: "var(--text-muted)" }}>{a.sub}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <h2 className="font-bold text-sm" style={{ color: "var(--text)" }}>Recent Problems in My Panchayat</h2>
+        {[
+          { title: "Handpump kharab — Ward 3", sub: "Bakri Bazar", status: "under-review", id: "JH-WTR-1024" },
+          { title: "Road damaged near school", sub: "Kanke Chowk", status: "in-progress", id: "JH-RD-982" },
+          { title: "Street lights not working", sub: "Lalgutwa", status: "submitted", id: "JH-EL-456" },
+        ].map(p => (
+          <Card key={p.id} className="p-4 mb-2" onClick={() => onNav("tracking")}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>{p.title}</p>
+                <p className="text-xs flex items-center gap-1 mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  <MapPin size={11} /> {p.sub}
+                </p>
+                <div className="flex gap-2 mt-2">
+                  <StatusBadge status={p.status} />
+                  <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>{p.id}</span>
+                </div>
+              </div>
+              <ChevronRight size={18} color="var(--text-muted)" />
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── LOCAL ORG (VICTIM) DASHBOARD ─────────────────────────────────────────────
+function OrgVictimDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t } = useApp();
+  return (
+    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
+      <NavBar role="citizen" screen="citizen-dashboard" onNav={onNav} />
+      <div className="px-4 pt-5 pb-4" style={{ background: "var(--nav-bg)" }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs" style={{ color: "rgba(255,255,255,0.55)" }}>Local Organisation</p>
+            <h1 className="text-xl font-black text-white">Kanke Jan Sewa Samiti</h1>
+            <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>Kanke Block, Ranchi</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+            style={{ background: "rgba(255,255,255,0.1)" }}>
+            <Users size={24} color="var(--amber)" />
+          </div>
+        </div>
+      </div>
+      <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { icon: <FileText size={18} />, label: "Reported Problems", value: "12", color: "var(--navy)" },
+            { icon: <Clock size={18} />, label: "Pending Review", value: "2", color: "var(--warning)" },
+            { icon: <Activity size={18} />, label: "In Progress", value: "3", color: "var(--amber)" },
+            { icon: <CheckCircle size={18} />, label: "Resolved", value: "7", color: "var(--success)" },
+          ].map(k => <KPICard key={k.label} {...k} />)}
+        </div>
+        <div className="space-y-2">
+          {[
+            { icon: <FileText size={18} />, label: "Submit Community Problem", screen: "report-step1" as Screen, color: "var(--amber)" },
+            { icon: <Eye size={18} />, label: "View Reported Problems", screen: "tracking" as Screen, color: "var(--navy)" },
+            { icon: <MapPin size={18} />, label: "Track Problems", screen: "tracking" as Screen, color: "var(--green)" },
+            { icon: <Bell size={18} />, label: t("notif.title"), screen: "notifications" as Screen, color: "#7C3AED" },
+          ].map(a => (
+            <button key={a.label} onClick={() => onNav(a.screen)}
+              className="w-full p-4 rounded-xl border-2 flex items-center gap-3 text-left transition-all card-hover active:scale-95"
+              style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                style={{ background: `color-mix(in srgb, ${a.color} 12%, transparent)`, color: a.color }}>
+                {a.icon}
+              </div>
+              <span className="font-semibold text-sm" style={{ color: "var(--text)" }}>{a.label}</span>
+              <ChevronRight size={16} color="var(--text-muted)" className="ml-auto" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ORG SOLVER LOGIN ──────────────────────────────────────────────────────────
+function OrgSolverLoginScreen

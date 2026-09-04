@@ -1,0 +1,10 @@
+{
+  "description": "Connects Jharkhand citizens with government and educational institutions to report societal issues, fostering innovative solutions and community engagement.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
