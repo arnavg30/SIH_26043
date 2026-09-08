@@ -3,10 +3,9 @@ import {
   signInWithEmailAndPassword,
   sendEmailVerification,
 } from "firebase/auth";
-
 import { auth } from "./firebase/config";
-
-import { useState, useEffect, createContext, useContext } from "react";
+import { apiFetch } from "./api";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
 import {
   Sun, Moon, Globe, ChevronRight, MapPin, Mic, MicOff, Keyboard,
   Camera, Upload, Video, Bell, User, Users, Building2, GraduationCap,
@@ -662,6 +661,20 @@ function OTPLoginScreen({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [isLogin, setIsLogin] = useState(false);
+  const [panchayatName, setPanchayatName] = useState("");
+  const [sarpanchName, setSarpanchName] = useState("");
+  const [officeAddress, setOfficeAddress] = useState("");
+  const [officialPhone, setOfficialPhone] = useState("");
+  const [panchayatDistrict, setPanchayatDistrict] = useState("");
+  const [panchayatBlock, setPanchayatBlock] = useState("");
+  const [villagesCovered, setVillagesCovered] = useState("");
+  const [name, setName] = useState("");
+  const [gender, setGender] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [houseNumber, setHouseNumber] = useState("");
+  const [cityVillage, setCityVillage] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [landmark, setLandmark] = useState("");
 
   // ─── EMAIL LOGIN / SIGNUP ──────────────────────────────────────────────────
   const handleEmailAuth = async () => {
@@ -699,17 +712,21 @@ function OTPLoginScreen({
         const token = await result.user.getIdToken();
 
         console.log("Firebase login successful:", result.user.uid);
-        console.log("Firebase Token:", token);
 
         // Test backend authentication
         try {
           const response = await fetch(
-            "http://localhost:5000/api/protected",
+            "http://localhost:5000/api/auth/sync",
             {
-              method: "GET",
+              method: "POST",
               headers: {
                 Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
               },
+              body: JSON.stringify({
+                profileType: profileType === "localorg" ? "LOCAL_ORG" : profileType,
+                languageCode: "en",
+              }),
             }
           );
 
@@ -819,17 +836,20 @@ function OTPLoginScreen({
         auth.currentUser.uid
       );
 
-      console.log("Firebase Token:", token);
-
       // Test backend authentication
       try {
         const response = await fetch(
-          "http://localhost:5000/api/protected",
+          "http://localhost:5000/api/auth/sync",
           {
-            method: "GET",
+            method: "POST",
             headers: {
               Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
             },
+            body: JSON.stringify({
+              profileType,
+              languageCode: "en",
+            }),
           }
         );
 
@@ -848,7 +868,16 @@ function OTPLoginScreen({
         );
         return;
       }
+const profileResponse = await fetch(
+  "http://localhost:5000/api/profile/me",
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  }
+);
 
+const profileData = await profileResponse.json();
       setStep("profile");
     } catch (err: any) {
       console.error(err);
@@ -861,6 +890,90 @@ function OTPLoginScreen({
   };
 
   // ─── PROFILE FORM ──────────────────────────────────────────────────────────
+  const saveCitizenProfile = async () => {
+  if (!name.trim()) {
+    setError("Name is required.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    setError("");
+
+    await apiFetch("/api/profile/citizen", {
+      method: "PUT",
+      body: JSON.stringify({
+        name,
+        gender: gender || null,
+        dateOfBirth: dateOfBirth || null,
+        houseNumber: houseNumber || null,
+        cityVillage: cityVillage || null,
+        pincode: pincode || null,
+        landmark: landmark || null,
+      }),
+    });
+
+    onSuccess();
+  } catch (err: any) {
+    console.error("Profile save error:", err);
+    setError(err.message || "Could not save profile.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+const savePanchayatProfile = async () => {
+  if (!panchayatName.trim()) {
+    setError("Panchayat name is required.");
+    return;
+  }
+
+  if (!sarpanchName.trim()) {
+    setError("Sarpanch / Mukhiya name is required.");
+    return;
+  }
+
+  if (!panchayatDistrict.trim()) {
+    setError("District is required.");
+    return;
+  }
+
+  if (!panchayatBlock.trim()) {
+    setError("Block is required.");
+    return;
+  }
+
+  if (!officeAddress.trim()) {
+    setError("Office address is required.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    setError("");
+
+    await apiFetch("/api/profile/panchayat", {
+      method: "PUT",
+      body: JSON.stringify({
+        panchayatName,
+        sarpanchName,
+        district: panchayatDistrict,
+        block: panchayatBlock,
+        villagesCovered,
+        officeAddress,
+        officialPhone,
+      }),
+    });
+
+    onSuccess();
+  } catch (err: any) {
+    console.error("Panchayat profile save error:", err);
+    setError(err.message || "Could not save Panchayat profile.");
+  } finally {
+    setLoading(false);
+  }
+};
+
   const ProfileForm = () => {
     if (profileType === "panchayat") {
       return (
@@ -881,6 +994,8 @@ function OTPLoginScreen({
               <span style={{ color: "var(--error)" }}>*</span>
             </label>
             <input
+              value={panchayatName}
+              onChange={(e) => setPanchayatName(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
               style={{
                 background: "var(--input-bg)",
@@ -899,6 +1014,8 @@ function OTPLoginScreen({
               <span style={{ color: "var(--error)" }}>*</span>
             </label>
             <input
+              value={sarpanchName}
+              onChange={(e) => setSarpanchName(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
               style={{
                 background: "var(--input-bg)",
@@ -917,6 +1034,8 @@ function OTPLoginScreen({
               <span style={{ color: "var(--error)" }}>*</span>
             </label>
             <input
+              value={officeAddress}
+              onChange={(e) => setOfficeAddress(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
               style={{
                 background: "var(--input-bg)",
@@ -935,6 +1054,8 @@ function OTPLoginScreen({
               <span style={{ color: "var(--error)" }}>*</span>
             </label>
             <input
+              value={officialPhone}
+              onChange={(e) => setOfficialPhone(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
               style={{
                 background: "var(--input-bg)",
@@ -952,6 +1073,8 @@ function OTPLoginScreen({
               District
             </label>
             <input
+              value={panchayatDistrict}
+              onChange={(e) => setPanchayatDistrict(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
               style={{
                 background: "var(--input-bg)",
@@ -969,6 +1092,8 @@ function OTPLoginScreen({
               Block
             </label>
             <input
+              value={panchayatBlock}
+              onChange={(e) => setPanchayatBlock(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
               style={{
                 background: "var(--input-bg)",
@@ -986,6 +1111,8 @@ function OTPLoginScreen({
               Village(s)
             </label>
             <input
+              value={villagesCovered}
+              onChange={(e) => setVillagesCovered(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
               style={{
                 background: "var(--input-bg)",
@@ -995,7 +1122,7 @@ function OTPLoginScreen({
             />
           </div>
 
-          <Btn onClick={onSuccess} className="w-full">
+          <Btn onClick={savePanchayatProfile} className="w-full">
             {t("profile.getstarted")} <ChevronRight size={16} />
           </Btn>
         </>
@@ -1403,14 +1530,16 @@ function OTPLoginScreen({
             {t("profile.name")}{" "}
             <span style={{ color: "var(--error)" }}>*</span>
           </label>
-          <input
-            className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-            style={{
-              background: "var(--input-bg)",
-              borderColor: "var(--border)",
-              color: "var(--text)"
-            }}
-          />
+         <input
+  value={name}
+  onChange={(e) => setName(e.target.value)}
+  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+  style={{
+    background: "var(--input-bg)",
+    borderColor: "var(--border)",
+    color: "var(--text)"
+  }}
+/>
         </div>
 
         <div className="mb-3">
@@ -1423,6 +1552,8 @@ function OTPLoginScreen({
           </label>
 
           <select
+            value={gender}
+            onChange={(e) => setGender(e.target.value)}
             className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
             style={{
               background: "var(--input-bg)",
@@ -1449,6 +1580,8 @@ function OTPLoginScreen({
 
           <input
             type="date"
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
             className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
             style={{
               background: "var(--input-bg)",
@@ -1474,6 +1607,8 @@ function OTPLoginScreen({
             <div className="relative">
               <input
                 placeholder={t("profile.housenumber")}
+                value={houseNumber}
+                onChange={(e) => setHouseNumber(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
                 style={{
                   background: "var(--input-bg)",
@@ -1486,6 +1621,8 @@ function OTPLoginScreen({
             <div className="relative">
               <input
                 placeholder={t("profile.city")}
+                value={cityVillage}
+                onChange={(e) => setCityVillage(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
                 style={{
                   background: "var(--input-bg)",
@@ -1498,6 +1635,8 @@ function OTPLoginScreen({
             <div className="relative">
               <input
                 placeholder={t("profile.pincode")}
+                value={pincode}
+                onChange={(e) => setPincode(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
                 style={{
                   background: "var(--input-bg)",
@@ -1510,6 +1649,8 @@ function OTPLoginScreen({
             <div className="relative">
               <input
                 placeholder={t("profile.landmark")}
+                value={landmark}
+                onChange={(e) => setLandmark(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
                 style={{
                   background: "var(--input-bg)",
@@ -1521,7 +1662,7 @@ function OTPLoginScreen({
           </div>
         </div>
 
-        <Btn onClick={onSuccess} className="w-full">
+        <Btn onClick={saveCitizenProfile} className="w-full">
           {t("profile.getstarted")} <ChevronRight size={16} />
         </Btn>
       </>
@@ -1732,7 +1873,7 @@ function OTPLoginScreen({
           )}
 
           {/* ─── PROFILE ──────────────────────────────────────────────────── */}
-          {step === "profile" && <ProfileForm />}
+          {step === "profile" && ProfileForm()}
 
         </Card>
       </div>
@@ -1782,7 +1923,35 @@ function OrgVictimLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 // ─── CITIZEN DASHBOARD ────────────────────────────────────────────────────────
 function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
+
   const { t } = useApp();
+
+  const [profile, setProfile] = useState<any>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const user = auth.currentUser;
+
+        if (!user) {
+          setLoadingProfile(false);
+          return;
+        }
+
+        const data = await apiFetch("/api/profile/me");
+
+        setProfile(data.profile);
+      } catch (error) {
+        console.error("Profile load error:", error);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+
+    loadProfile();
+  }, []);  
+  
   const statuses = [
     { icon: <SendHorizontal size={20} />, val: "3", key: "cit.submitted", color: "#1D4ED8" },
     { icon: <Clock size={20} />, val: "2", key: "cit.underreview", color: "var(--warning)" },
@@ -1797,10 +1966,23 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-xs" style={{ color: "rgba(255,255,255,0.55)" }}>{t("cit.namaste")}</p>
-            <h1 className="text-xl font-black text-white">Ram Kumar Ji</h1>
-            <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Bakri Bazar, Kanke, Ranchi
-            </p>
+            <h1 className="text-xl font-black text-white">
+  {loadingProfile ? "Loading..." : `${profile?.name || "Citizen"}`}
+</h1>
+            <p
+  className="text-xs mt-0.5"
+  style={{ color: "rgba(255,255,255,0.45)" }}
+>
+  {loadingProfile
+    ? "Loading address..."
+    : [
+        profile?.city_village,
+        profile?.district,
+        profile?.pincode,
+      ]
+        .filter(Boolean)
+        .join(", ") || "Address not added"}
+</p>
           </div>
           <button onClick={() => onNav("notifications")}
             className="relative w-10 h-10 rounded-xl flex items-center justify-center"
@@ -2428,25 +2610,48 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 }
 
 // ─── REPORT STEP 1 ────────────────────────────────────────────────────────────
-function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
+function ReportStep1Screen({
+  onNav,
+  reportData,
+  setReportData,
+  mediaFiles,
+  setMediaFiles,
+}: {
+onNav: (s: Screen) => void;
+reportData: {
+  description: string;
+  category: string;
+  district: string;
+  block: string;
+  panchayatWard: string;
+  landmark: string;
+  siteAddress: string;
+  latitude: string;
+  longitude: string;
+};
+setReportData: React.Dispatch<React.SetStateAction<typeof reportData>>;
+mediaFiles: File[];
+setMediaFiles: React.Dispatch<React.SetStateAction<File[]>>;
+}) {
   const { t, role } = useApp();
-  const [desc, setDesc] = useState("");
+  const [desc, setDesc] = useState(reportData.description);
   const [mode, setMode] = useState<"none" | "voice" | "text">("none");
-  const [selCat, setSelCat] = useState<string | null>(null);
+  const [selCat, setSelCat] = useState<string | null>(reportData.category || null);
+  const [categories, setCategories] = useState<{ category_id: number; category_name: string }[]>([]);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const [listening, setListening] = useState(false);
 
-  const cats = [
-    { icon: <Wheat size={18} />, label: "Agriculture" },
-    { icon: <Droplets size={18} />, label: "Water" },
-    { icon: <Stethoscope size={18} />, label: "Healthcare" },
-    { icon: <School size={18} />, label: "Education" },
-    { icon: <Navigation size={18} />, label: "Roads" },
-    { icon: <Trash2 size={18} />, label: "Sanitation" },
-    { icon: <Leaf size={18} />, label: "Environment" },
-    { icon: <Zap size={18} />, label: "Electricity" },
-    { icon: <Building size={18} />, label: "Public Services" },
-    { icon: <Layers size={18} />, label: "Other" },
-  ];
+  useEffect(() => {
+  apiFetch("/api/categories")
+    .then(data => setCategories(data.categories || []))
+    .catch(err => console.error(err));
+}, []);
+const cats = categories.map(c => ({
+  id: c.category_id,
+  icon: <Layers size={18} />,
+  label: c.category_name,
+}));
 
   const StepDots = () => (
     <div className="flex items-center gap-1">
@@ -2484,13 +2689,17 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
           {t("rep.step1.category")}
         </h2>
         <div className="grid grid-cols-5 gap-2 mb-6">
-          {cats.map(c => (
-            <button key={c.label} onClick={() => setSelCat(selCat === c.label ? null : c.label)}
+{cats.map(c => (
+  <button key={c.id} onClick={() => {
+    const value = selCat === String(c.id) ? null : String(c.id);
+    setSelCat(value);
+    setReportData(prev => ({ ...prev, category: value || "" }));
+  }}
               className="flex flex-col items-center p-2 rounded-xl border-2 transition-all active:scale-95"
               style={{
-                borderColor: selCat === c.label ? "var(--green)" : "var(--border)",
-                background: selCat === c.label ? "var(--success-bg)" : "var(--card)",
-                color: selCat === c.label ? "var(--green)" : "var(--text-muted)"
+                borderColor: selCat === String(c.id) ? "var(--green)" : "var(--border)",
+                background: selCat === String(c.id) ? "var(--success-bg)" : "var(--card)",
+                color: selCat === String(c.id) ? "var(--green)" : "var(--text-muted)"
               }}>
               {c.icon}
               <span className="text-xs mt-1 text-center leading-tight"
@@ -2548,7 +2757,7 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
                 <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>Listening…</p>
                 <p className="text-xs mt-2 italic px-4 py-2 rounded-xl"
                   style={{ background: "var(--card)", color: "var(--text)" }}>
-                  "Hamare gaon ka handpump 2 haftton se kharab hai."
+                  {reportData.description || "No description provided"}
                 </p>
                 <button onClick={() => { setListening(false); setMode("text"); setDesc("Hamare gaon ka handpump 2 haftton se kharab hai. Paani aana band ho gaya hai."); }}
                   className="mt-3 text-xs font-semibold underline" style={{ color: "var(--green)" }}>
@@ -2559,30 +2768,98 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
           </div>
         )}
 
-        {mode === "text" && (
-          <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={4}
-            placeholder="Apni samasya yahan likhein… / Type your problem here…"
-            className="w-full px-4 py-3 rounded-xl border-2 text-sm outline-none resize-none mb-4"
-            style={{
-              borderColor: desc ? "var(--navy)" : "var(--border)",
-              background: "var(--input-bg)", color: "var(--text)"
-            }} />
-        )}
+{mode === "text" && (
+  <textarea
+    value={desc}
+    onChange={e => {
+      setDesc(e.target.value);
+      setReportData(prev => ({
+        ...prev,
+        description: e.target.value,
+      }));
+    }}
+    rows={4}
+    placeholder="Apni samasya yahan likhein… / Type your problem here…"
+    className="w-full px-4 py-3 rounded-xl border-2 text-sm outline-none resize-none mb-4"
+    style={{
+      borderColor: desc ? "var(--navy)" : "var(--border)",
+      background: "var(--input-bg)",
+      color: "var(--text)",
+    }}
+  />
+)}
 
         <h2 className="font-semibold text-sm mb-3" style={{ color: "var(--text)" }}>{t("rep.step1.photo")}</h2>
-        <div className="grid grid-cols-3 gap-2 mb-6">
-          {[
-            { icon: <Camera size={22} />, label: "Take Photo" },
-            { icon: <Upload size={22} />, label: "Upload Photo" },
-            { icon: <Video size={22} />, label: "Upload Video" },
-          ].map(b => (
-            <button key={b.label} className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
-              style={{ borderColor: "var(--border)", background: "var(--card)", color: "var(--text-muted)" }}>
-              {b.icon}
-              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{b.label}</span>
-            </button>
-          ))}
-        </div>
+<div className="grid grid-cols-3 gap-2 mb-6">
+
+  <input
+    ref={photoInputRef}
+    type="file"
+    accept="image/*"
+    capture="environment"
+    multiple
+    className="hidden"
+    onChange={e => {
+      const files = Array.from(e.target.files || []);
+      setMediaFiles(prev => [...prev, ...files]);
+    }}
+  />
+
+  <input
+    ref={videoInputRef}
+    type="file"
+    accept="video/*"
+    multiple
+    className="hidden"
+    onChange={e => {
+      const files = Array.from(e.target.files || []);
+      setMediaFiles(prev => [...prev, ...files]);
+    }}
+  />
+
+  <button
+    type="button"
+    onClick={() => photoInputRef.current?.click()}
+    className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
+    style={{
+      borderColor: "var(--border)",
+      background: "var(--card)",
+      color: "var(--text-muted)"
+    }}
+  >
+    <Camera size={22} />
+    <span className="text-xs font-medium">Take Photo</span>
+  </button>
+
+  <button
+    type="button"
+    onClick={() => photoInputRef.current?.click()}
+    className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
+    style={{
+      borderColor: "var(--border)",
+      background: "var(--card)",
+      color: "var(--text-muted)"
+    }}
+  >
+    <Upload size={22} />
+    <span className="text-xs font-medium">Upload Photo</span>
+  </button>
+
+  <button
+    type="button"
+    onClick={() => videoInputRef.current?.click()}
+    className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
+    style={{
+      borderColor: "var(--border)",
+      background: "var(--card)",
+      color: "var(--text-muted)"
+    }}
+  >
+    <Video size={22} />
+    <span className="text-xs font-medium">Upload Video</span>
+  </button>
+
+</div>
 
         <Btn onClick={() => onNav("report-step2")} className="w-full py-4 text-base"
           icon={<ArrowRight size={18} />}>
@@ -2594,12 +2871,44 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
 }
 
 // ─── REPORT STEP 2 ────────────────────────────────────────────────────────────
-function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
+function ReportStep2Screen({
+  onNav,
+  reportData,
+  setReportData,
+}: {
+  onNav: (s: Screen) => void;
+  reportData: {
+    description: string;
+    category: string;
+    district: string;
+    block: string;
+    panchayatWard: string;
+    landmark: string;
+    siteAddress: string;
+    latitude: string;
+    longitude: string;
+  };
+  setReportData: React.Dispatch<React.SetStateAction<typeof reportData>>;
+}) {
   const { t } = useApp();
   const [method, setMethod] = useState<"none" | "gps" | "map" | "manual">("none");
-  const [dist, setDist] = useState("");
-  const [block, setBlock] = useState("");
-  const [panch, setPanch] = useState("");
+  useEffect(() => {
+  if (method === "gps") {
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        setReportData(prev => ({
+          ...prev,
+          latitude: String(position.coords.latitude),
+          longitude: String(position.coords.longitude),
+        }));
+      },
+      () => {}
+    );
+  }
+}, [method]);
+  const [dist, setDist] = useState(reportData.district);
+  const [block, setBlock] = useState(reportData.block);
+  const [panch, setPanch] = useState(reportData.panchayatWard);
 
 
   const StepDots = () => (
@@ -2675,11 +2984,11 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
                 {t("loc.confirmed")}:
               </p>
               {[
-                ["loc.village", "Bakri Bazar"],
-                ["loc.panchayat", "Piska Nagri"],
-                ["loc.block", "Kanke"],
-                ["loc.district", "Ranchi, Jharkhand"],
-              ].map(([k, v]) => (
+  ["loc.village", reportData.panchayatWard],
+  ["loc.panchayat", reportData.panchayatWard],
+  ["loc.block", reportData.block],
+  ["loc.district", reportData.district],
+].map(([k, v]) => (
                 <div key={k} className="flex justify-between text-sm py-0.5">
                   <span style={{ color: "var(--text-muted)" }}>{t(k)}</span>
                   <span className="font-semibold" style={{ color: "var(--text)" }}>{v}</span>
@@ -2717,11 +3026,66 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
             ].map(f => (
               <div key={f.key} className="mb-3">
                 <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>{t(f.key)}</label>
-                <select className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}>
-                  <option value="">Select…</option>
-                  {f.opts.map(o => <option key={o}>{o}</option>)}
-                </select>
+<select
+  value={
+    f.key === "loc.district"
+      ? dist
+      : f.key === "loc.block"
+      ? block
+      : f.key === "loc.panchayat"
+      ? panch
+      : reportData.siteAddress
+  }
+  onChange={e => {
+    const value = e.target.value;
+
+    if (f.key === "loc.district") {
+      setDist(value);
+      setBlock("");
+      setPanch("");
+      setReportData(prev => ({
+        ...prev,
+        district: value,
+        block: "",
+        panchayatWard: "",
+      }));
+    }
+
+    if (f.key === "loc.block") {
+      setBlock(value);
+      setPanch("");
+      setReportData(prev => ({
+        ...prev,
+        block: value,
+        panchayatWard: "",
+      }));
+    }
+
+if (f.key === "loc.panchayat") {
+  setPanch(value);
+  setReportData(prev => ({
+    ...prev,
+    panchayatWard: value,
+  }));
+}
+
+if (f.key === "loc.village") {
+  setReportData(prev => ({
+    ...prev,
+    siteAddress: value,
+  }));
+}
+  }}
+  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+  style={{
+    background: "var(--input-bg)",
+    borderColor: "var(--border)",
+    color: "var(--text)"
+  }}
+>
+  <option value="">Select…</option>
+  {f.opts.map(o => <option key={o}>{o}</option>)}
+</select>
               </div>
             ))}
           </Card>
@@ -2739,8 +3103,63 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
 }
 
 // ─── REPORT STEP 3 ────────────────────────────────────────────────────────────
-function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
+function ReportStep3Screen({
+  onNav,
+  reportData,
+  mediaFiles,
+  setProblemCode,
+}: {
+  onNav: (s: Screen) => void;
+  reportData: {
+    description: string;
+    category: string;
+    district: string;
+    block: string;
+    panchayatWard: string;
+    landmark: string;
+    siteAddress: string;
+    latitude: string;
+    longitude: string;
+  };
+  mediaFiles: File[];
+  setProblemCode: React.Dispatch<React.SetStateAction<string>>;
+}) {
   const { t } = useApp();
+  const [categories, setCategories] = useState<
+  { category_id: number; category_name: string }[]
+>([]);
+
+useEffect(() => {
+  apiFetch("/api/categories")
+    .then(data => setCategories(data.categories || []))
+    .catch(err => console.error(err));
+}, []);
+  const handleSubmit = async () => {
+  const formData = new FormData();
+
+  formData.append("title", reportData.description.slice(0, 100));
+  formData.append("description", reportData.description);
+  formData.append("categoryId", reportData.category);
+  formData.append("district", reportData.district);
+  formData.append("block", reportData.block);
+  formData.append("panchayatWard", reportData.panchayatWard);
+  formData.append("siteAddress", reportData.siteAddress);
+  formData.append("landmark", reportData.landmark);
+  formData.append("latitude", reportData.latitude);
+  formData.append("longitude", reportData.longitude);
+
+  mediaFiles.forEach(file => {
+    formData.append("media", file);
+  });
+
+  const data = await apiFetch("/api/problems", {
+    method: "POST",
+    body: formData,
+  });
+
+  setProblemCode(data.problem.problem_code);
+  onNav("ai-processing");
+};
   const StepDots = () => (
     <div className="flex items-center gap-1">
       {[1, 2, 3].map(s => (
@@ -2780,7 +3199,7 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
                 <MessageSquare size={11} /> Problem Description
               </p>
               <p className="text-sm" style={{ color: "var(--text)" }}>
-                "Hamare gaon ka handpump 2 haftton se kharab hai."
+                {reportData.description || "No description provided"}
               </p>
             </div>
             <div className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
@@ -2788,17 +3207,21 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
                 <MapPin size={11} /> Location
               </p>
               <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                Bakri Bazar, Kanke Block, Ranchi
+                {[reportData.siteAddress, reportData.block, reportData.district]
+  .filter(Boolean)
+  .join(", ") || "Location not provided"}
               </p>
             </div>
             <div className="flex gap-3">
               <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--success-bg)" }}>
                 <Droplets size={16} color="var(--green)" className="mx-auto mb-1" />
-                <p className="text-xs font-bold" style={{ color: "var(--green)" }}>Water</p>
+                <p className="text-xs font-bold" style={{ color: "var(--green)" }}>
+  {categories.find(c => String(c.category_id) === reportData.category)?.category_name || "Category"}
+</p>
               </div>
               <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--warning-bg)" }}>
                 <Camera size={16} color="var(--warning)" className="mx-auto mb-1" />
-                <p className="text-xs font-bold" style={{ color: "var(--warning)" }}>1 Photo</p>
+                <p className="text-xs font-bold" style={{ color: "var(--warning)" }}>{mediaFiles.length} {mediaFiles.length === 1 ? "Photo/Video" : "Photos/Videos"}</p>
               </div>
             </div>
           </div>
@@ -2815,7 +3238,7 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
           ))}
         </div>
 
-        <Btn onClick={() => onNav("ai-processing")} className="w-full py-4 text-base mb-3"
+        <Btn onClick={handleSubmit} className="w-full py-4 text-base mb-3"
           icon={<SendHorizontal size={18} />}>
           {t("rep.submit")}
         </Btn>
@@ -2831,6 +3254,13 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── AI PROCESSING ────────────────────────────────────────────────────────────
 function AIProcessingScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const [categories, setCategories] = useState<{ category_id: number; category_name: string }[]>([]);
+
+useEffect(() => {
+  apiFetch("/api/categories")
+    .then(data => setCategories(data.categories || []))
+    .catch(err => console.error(err));
+}, []); 
   const [step, setStep] = useState(0);
   const steps = [
     t("ai.processing"),
@@ -2962,8 +3392,8 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
   );
 }
 
-// ─── SUBMIT SUCCESS ────────────────────────────────────────────────────────────
-function SubmitSuccessScreen({ onNav }: { onNav: (s: Screen) => void }) {
+// ─── onSubmit SUCCESS ────────────────────────────────────────────────────────────
+function SubmitSuccessScreen({ onNav, problemCode }: { onNav: (s: Screen) => void; problemCode?: string }) {
   const { t, role } = useApp();
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center"
@@ -2982,7 +3412,7 @@ function SubmitSuccessScreen({ onNav }: { onNav: (s: Screen) => void }) {
           <ClipboardList size={12} /> Challenge ID
         </p>
         <div className="text-3xl font-black font-mono tracking-wide mb-2" style={{ color: "var(--navy)" }}>
-          JH-WTR-1024
+          {problemCode || "—"}
         </div>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>Save this to track your problem</p>
       </Card>
@@ -4291,6 +4721,19 @@ export default function App() {
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("jsic_lang") as Lang) || "en");
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
   const [screen, setScreen] = useState<Screen>("landing");
+  const [problemCode, setProblemCode] = useState("");
+  const [reportData, setReportData] = useState({
+  description: "",
+  category: "",
+  district: "",
+  block: "",
+  panchayatWard: "",
+  landmark: "",
+  siteAddress: "",
+  latitude: "",
+  longitude: "",
+});
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [role, setRole] = useState("citizen");
   const [showLangModal, setShowLangModal] = useState(() => !localStorage.getItem("jsic_lang"));
   const [loading, setLoading] = useState(false);
@@ -4324,7 +4767,15 @@ export default function App() {
     }, 450);
   };
 
-  const props = { onNav: navigate };
+const props = { onNav: navigate, problemCode, setProblemCode };
+const reportProps = {
+  ...props,
+  reportData,
+  setReportData,
+  mediaFiles,
+  setMediaFiles,
+  setProblemCode,
+};
 
   return (
     <Ctx.Provider value={{ lang, setLang: setLangAndSave, dark, setDark: setDarkAndSave, t, role, setRole }}>
@@ -4350,9 +4801,9 @@ export default function App() {
         {screen === "uni-login" && <UniLoginScreen {...props} />}
         {screen === "industry-login" && <IndustryLoginScreen {...props} />}
         {screen === "citizen-dashboard" && <CitizenDashboardScreen {...props} />}
-        {screen === "report-step1" && <ReportStep1Screen {...props} />}
-        {screen === "report-step2" && <ReportStep2Screen {...props} />}
-        {screen === "report-step3" && <ReportStep3Screen {...props} />}
+        {screen === "report-step1" && <ReportStep1Screen {...reportProps} />}
+        {screen === "report-step2" && <ReportStep2Screen {...reportProps} />}
+        {screen === "report-step3" && <ReportStep3Screen {...reportProps} />}
         {screen === "ai-processing" && <AIProcessingScreen {...props} />}
         {screen === "ai-result" && <AIResultScreen {...props} />}
         {screen === "submit-success" && <SubmitSuccessScreen {...props} />}

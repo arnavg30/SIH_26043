@@ -58,6 +58,7 @@ CREATE TABLE users (
     language_id     BIGINT REFERENCES languages(language_id),
     phone_number    VARCHAR(15) UNIQUE,                  -- Login identifier for Mobile OTP flow
     email           VARCHAR(255) UNIQUE,                 -- Login identifier for Corporate / Institutional email flow
+    firebase_uid    VARCHAR(128) UNIQUE,
     is_verified     BOOLEAN NOT NULL DEFAULT FALSE,      -- Verification status via OTP / Verification Code
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

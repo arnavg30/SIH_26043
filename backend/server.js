@@ -3,89 +3,554 @@ const cors = require("cors");
 require("dotenv").config();
 
 const { Pool } = require("pg");
-const { initializeApp, cert } = require("firebase-admin/app");
+const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 
+const oci = require("oci-sdk");
+const fs = require("fs");
+
 const app = express();
-
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
-// ==================== Firebase Admin ====================
-
-const serviceAccount = require("./firebase-service-account.json");
-
-initializeApp({
-  credential: cert(serviceAccount),
-});
-
+// ---------------- Firebase Admin ----------------
+if (!getApps().length) {
+  const serviceAccount = require(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "./firebase-service-account.json");
+  initializeApp({ credential: cert(serviceAccount) });
+}
 const firebaseAuth = getAuth();
 
-// ==================== PostgreSQL ====================
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+// ==================== OCI Object Storage ====================
+const common = require("oci-common");
+const objectstorage = require("oci-objectstorage");
+const ociProvider = new common.ConfigFileAuthenticationDetailsProvider(
+  "C:\\Users\\arnav\\.oci\\config.txt"
+);
+const objectStorageClient = new objectstorage.ObjectStorageClient({
+  authenticationDetailsProvider: ociProvider,
 });
+const namespaceName = process.env.OCI_NAMESPACE;
+const bucketName = process.env.OCI_BUCKET_NAME;
+async function uploadToOCI(file, objectName) {
+  await objectStorageClient.putObject({
+    namespaceName,
+    bucketName,
+    objectName,
+    putObjectBody: file.buffer,
+    contentType: file.mimetype,
+  });
 
-// Test PostgreSQL connection
-pool.query("SELECT NOW()", (err, result) => {
-  if (err) {
-    console.error("PostgreSQL connection failed:", err.message);
-  } else {
-    console.log("PostgreSQL connected!");
-  }
-});
+  return objectName;
+}
 
-// ==================== Firebase Authentication Middleware ====================
+// ---------------- PostgreSQL ----------------
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+pool.query("SELECT NOW()")
+  .then(() => console.log("PostgreSQL connected!"))
+  .catch((err) => console.error("PostgreSQL connection failed:", err.message));
+
+// ---------------- Helpers ----------------
+function clean(value) {
+  return typeof value === "string" ? value.trim() : value;
+}
 
 async function verifyToken(req, res, next) {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        message: "No token provided",
-      });
+    const header = req.headers.authorization || "";
+    if (!header.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "No Firebase ID token provided" });
     }
-
-    const token = authHeader.split("Bearer ")[1];
-
-    const decodedToken = await firebaseAuth.verifyIdToken(token);
-
-    req.user = decodedToken;
-
+    const token = header.slice(7);
+    req.user = await firebaseAuth.verifyIdToken(token);
     next();
-  } catch (error) {
-    console.error("Authentication error:", error.message);
-
-    return res.status(401).json({
-      message: "Invalid or expired token",
-    });
+  } catch (err) {
+    console.error("Authentication error:", err.message);
+    return res.status(401).json({ message: "Invalid or expired Firebase token" });
   }
 }
 
-// ==================== Test API ====================
+async function getDbUser(firebaseUid) {
+  const { rows } = await pool.query(
+    `SELECT * FROM users WHERE firebase_uid = $1 LIMIT 1`,
+    [firebaseUid]
+  );
+  return rows[0] || null;
+}
 
-// Public route
+function makeProblemCode(categoryName) {
+  const prefix = String(categoryName || "OTHER")
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(0, 4)
+    .toUpperCase()
+    .padEnd(4, "X");
+  return `JH-${prefix}-${Date.now().toString(36).toUpperCase()}`;
+}
+
+// ---------------- Public ----------------
 app.get("/", (req, res) => {
-  res.json({
-    message: "SIH Backend is running",
-  });
+  res.json({ message: "SIH Backend is running" });
 });
 
-// Protected route - Firebase login required
-app.get("/api/protected", verifyToken, (req, res) => {
-  res.json({
-    message: "Authentication successful!",
-    uid: req.user.uid,
-    email: req.user.email,
-  });
+app.get("/api/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ ok: true, database: "connected" });
+  } catch (err) {
+    res.status(503).json({ ok: false, database: "unavailable" });
+  }
 });
 
-// ==================== Start Server ====================
+// ---------------- Authentication / user sync ----------------
+// Firebase remains the source of authentication. PostgreSQL stores application identity/profile.
+app.post("/api/auth/sync", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { profileType = "CITIZEN", languageCode = "en" } = req.body || {};
+    const allowed = new Set(["CITIZEN", "PANCHAYAT", "LOCAL_ORG", "ORGANIZATION", "INDUSTRY", "UNIVERSITY"]);
+    const subType = String(profileType).toUpperCase();
+    if (!allowed.has(subType)) return res.status(400).json({ message: "Invalid profile type" });
+
+    const userType = ["CITIZEN", "PANCHAYAT", "LOCAL_ORG"].includes(subType) ? "VICTIM" : "SOLVER";
+    const phone = req.user.phone_number || null;
+    const email = req.user.email || null;
+
+    await client.query("BEGIN");
+
+    const langResult = await client.query(
+      `SELECT language_id FROM languages WHERE language_code = $1 LIMIT 1`,
+      [languageCode]
+    );
+    const languageId = langResult.rows[0]?.language_id || null;
+
+    const existing = await client.query(
+      `SELECT user_id, user_type, sub_type FROM users WHERE firebase_uid = $1 LIMIT 1`,
+      [req.user.uid]
+    );
+
+    let row;
+    if (existing.rows[0]) {
+      const result = await client.query(
+        `UPDATE users
+         SET phone_number = COALESCE($2, phone_number),
+             email = COALESCE($3, email),
+             language_id = COALESCE($4, language_id),
+             is_verified = TRUE,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE firebase_uid = $1
+         RETURNING user_id, user_type, sub_type, phone_number, email, language_id, is_verified`,
+        [req.user.uid, phone, email, languageId]
+      );
+      row = result.rows[0];
+    } else {
+      const result = await client.query(
+        `INSERT INTO users
+          (firebase_uid, user_type, sub_type, language_id, phone_number, email, is_verified)
+         VALUES ($1,$2,$3,$4,$5,$6,TRUE)
+         RETURNING user_id, user_type, sub_type, phone_number, email, language_id, is_verified`,
+        [req.user.uid, userType, subType, languageId, phone, email]
+      );
+      row = result.rows[0];
+    }
+
+    await client.query("COMMIT");
+    res.json({ user: row, firebaseUid: req.user.uid });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/api/auth/sync:", err);
+    res.status(500).json({ message: "Could not sync Firebase user", error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ---------------- Profile ----------------
+app.get("/api/profile/me", verifyToken, async (req, res) => {
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User profile not found. Call /api/auth/sync first." });
+
+    let profile = null;
+    if (user.sub_type === "CITIZEN") {
+      const r = await pool.query(`SELECT * FROM citizens WHERE user_id = $1`, [user.user_id]);
+      profile = r.rows[0] || null;
+    } else if (user.sub_type === "PANCHAYAT") {
+      const r = await pool.query(`SELECT * FROM panchayats WHERE user_id = $1`, [user.user_id]);
+      profile = r.rows[0] || null;
+    } else if (user.sub_type === "LOCAL_ORG") {
+      const r = await pool.query(`SELECT * FROM local_organizations WHERE user_id = $1`, [user.user_id]);
+      profile = r.rows[0] || null;
+    } else if (user.sub_type === "ORGANIZATION") {
+      const r = await pool.query(`SELECT * FROM organizations WHERE user_id = $1`, [user.user_id]);
+      profile = r.rows[0] || null;
+    } else if (user.sub_type === "INDUSTRY") {
+      const r = await pool.query(`SELECT * FROM industries WHERE user_id = $1`, [user.user_id]);
+      profile = r.rows[0] || null;
+    } else if (user.sub_type === "UNIVERSITY") {
+      const r = await pool.query(`SELECT * FROM universities WHERE user_id = $1`, [user.user_id]);
+      profile = r.rows[0] || null;
+    }
+
+    res.json({ user, profile });
+  } catch (err) {
+    console.error("/api/profile/me:", err);
+    res.status(500).json({ message: "Could not load profile" });
+  }
+});
+
+app.put("/api/profile/citizen", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+    if (user.sub_type !== "CITIZEN") return res.status(403).json({ message: "Citizen profile required" });
+
+    const {
+      name, gender, dateOfBirth, houseNumber, cityVillage,
+      pincode, landmark, district, residentialAddress,
+    } = req.body || {};
+
+    if (!clean(name)) return res.status(400).json({ message: "Name is required" });
+
+    await client.query("BEGIN");
+    const result = await client.query(
+      `INSERT INTO citizens
+        (user_id, name, gender, date_of_birth, house_number, city_village, pincode, landmark, district, residential_address)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (user_id) DO UPDATE SET
+        name=EXCLUDED.name, gender=EXCLUDED.gender, date_of_birth=EXCLUDED.date_of_birth,
+        house_number=EXCLUDED.house_number, city_village=EXCLUDED.city_village,
+        pincode=EXCLUDED.pincode, landmark=EXCLUDED.landmark, district=EXCLUDED.district,
+        residential_address=EXCLUDED.residential_address, updated_at=CURRENT_TIMESTAMP
+       RETURNING *`,
+      [user.user_id, clean(name), clean(gender) || null, dateOfBirth || null, clean(houseNumber) || null,
+       clean(cityVillage) || null, clean(pincode) || null, clean(landmark) || null,
+       clean(district) || null, clean(residentialAddress) || null]
+    );
+    await client.query("COMMIT");
+    res.json({ profile: result.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/api/profile/citizen:", err);
+    res.status(500).json({ message: "Could not save citizen profile", error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.put("/api/profile/panchayat", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const user = await getDbUser(req.user.uid);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not synced" });
+    }
+
+    if (user.sub_type !== "PANCHAYAT") {
+      return res.status(403).json({ message: "Panchayat profile required" });
+    }
+
+    const {
+      panchayatName,
+      sarpanchName,
+      district,
+      block,
+      villagesCovered,
+      officeAddress,
+      officialPhone,
+    } = req.body || {};
+
+    if (!clean(panchayatName)) {
+      return res.status(400).json({ message: "Panchayat name is required" });
+    }
+
+    if (!clean(sarpanchName)) {
+      return res.status(400).json({ message: "Sarpanch / Mukhiya name is required" });
+    }
+
+    if (!clean(district)) {
+      return res.status(400).json({ message: "District is required" });
+    }
+
+    if (!clean(block)) {
+      return res.status(400).json({ message: "Block is required" });
+    }
+
+    if (!clean(officeAddress)) {
+      return res.status(400).json({ message: "Office address is required" });
+    }
+
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      `INSERT INTO panchayats
+        (
+          user_id,
+          panchayat_name,
+          sarpanch_mukhiya_name,
+          district,
+          block,
+          villages_covered,
+          office_address,
+          official_phone
+        )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (user_id) DO UPDATE SET
+        panchayat_name = EXCLUDED.panchayat_name,
+        sarpanch_mukhiya_name = EXCLUDED.sarpanch_mukhiya_name,
+        district = EXCLUDED.district,
+        block = EXCLUDED.block,
+        villages_covered = EXCLUDED.villages_covered,
+        office_address = EXCLUDED.office_address,
+        official_phone = EXCLUDED.official_phone,
+        updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [
+        user.user_id,
+        clean(panchayatName),
+        clean(sarpanchName),
+        clean(district),
+        clean(block),
+        clean(villagesCovered) || null,
+        clean(officeAddress),
+        clean(officialPhone) || null,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      message: "Panchayat profile saved",
+      profile: result.rows[0],
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+
+    console.error("/api/profile/panchayat:", err);
+
+    res.status(500).json({
+      message: "Could not save Panchayat profile",
+      error: err.message,
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// ---------------- Categories ----------------
+app.get("/api/categories", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT category_id, category_name, icon_key, description
+       FROM problem_categories ORDER BY category_id`
+    );
+    res.json({ categories: rows });
+  } catch (err) {
+    res.status(500).json({ message: "Could not load categories" });
+  }
+});
+
+// ---------------- Problems ----------------
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
+app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, res) => {
+  const client = await pool.connect();
+  const mediaFiles = req.files || [];
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+
+    const {
+      categoryId, title, description, latitude, longitude,
+      district, block, panchayatWard, landmark, siteAddress,
+      reportedFor = "Myself", beneficiaryName, beneficiaryPhone, isAnonymous = false,
+      severity = "MEDIUM",
+    } = req.body || {};
+
+    if (!categoryId || !clean(title) || !clean(description) || !clean(district) || !clean(block) || !clean(siteAddress)) {
+      return res.status(400).json({ message: "categoryId, title, description, district, block and siteAddress are required" });
+    }
+
+    const cat = await client.query(`SELECT category_id, category_name FROM problem_categories WHERE category_id = $1`, [categoryId]);
+    if (!cat.rows[0]) return res.status(400).json({ message: "Invalid category" });
+
+    const code = makeProblemCode(cat.rows[0].category_name);
+    const result = await client.query(
+      `INSERT INTO problems
+       (problem_code, submitted_by, category_id, title, description, latitude, longitude,
+        district, block, panchayat_ward, landmark, site_address, reported_for,
+        beneficiary_name, beneficiary_phone, is_anonymous, severity)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       RETURNING *`,
+      [code, user.user_id, categoryId, clean(title), clean(description),
+ latitude === "" ? null : latitude,
+ longitude === "" ? null : longitude,
+       clean(district), clean(block), clean(panchayatWard) || null, clean(landmark) || null, clean(siteAddress),
+       reportedFor, clean(beneficiaryName) || null, clean(beneficiaryPhone) || null, Boolean(isAnonymous), severity]
+    );
+    for (const file of mediaFiles) {
+  const objectName = `${user.user_id}/${result.rows[0].problem_id}/${Date.now()}-${file.originalname}`;
+
+  await uploadToOCI(file, objectName);
+
+  await client.query(
+    `INSERT INTO problem_media
+      (problem_id, media_type, file_url, storage_path, file_name, mime_type, file_size)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      result.rows[0].problem_id,
+      file.mimetype.startsWith("image/")
+        ? "IMAGE"
+        : file.mimetype.startsWith("video/")
+        ? "VIDEO"
+        : "DOCUMENT",
+      objectName,
+      objectName,
+      file.originalname,
+      file.mimetype,
+      file.size,
+    ]
+  );
+}
+    res.status(201).json({
+  problem: result.rows[0],
+  media: mediaFiles.map(file => file.originalname),
+}); 
+  } catch (err) {
+    console.error("POST /api/problems:", err);
+    res.status(500).json({ message: "Could not create problem", error: err.message });
+  } finally {
+    client.release();
+  }
+});   
+
+app.get("/api/problems/my", verifyToken, async (req, res) => {
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+    const { rows } = await pool.query(
+      `SELECT p.*, c.category_name
+       FROM problems p
+       JOIN problem_categories c ON c.category_id = p.category_id
+       WHERE p.submitted_by = $1
+       ORDER BY p.created_at DESC`,
+      [user.user_id]
+    );
+    res.json({ problems: rows });
+  } catch (err) {
+    res.status(500).json({ message: "Could not load your problems" });
+  }
+});
+
+app.get("/api/problems/:problemCode", verifyToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.*, c.category_name
+       FROM problems p
+       JOIN problem_categories c ON c.category_id = p.category_id
+       WHERE p.problem_code = $1`,
+      [req.params.problemCode]
+    );
+    if (!rows[0]) return res.status(404).json({ message: "Problem not found" });
+    res.json({ problem: rows[0] });
+  } catch (err) {
+    res.status(500).json({ message: "Could not load problem" });
+  }
+});
+
+// Nearby problems. Distance is calculated in PostgreSQL from real GPS coordinates.
+app.get("/api/problems/nearby", verifyToken, async (req, res) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    const radiusKm = Math.min(Math.max(Number(req.query.radiusKm) || 10, 1), 100);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ message: "lat and lng query parameters are required" });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT * FROM (
+         SELECT p.problem_id, p.problem_code, p.title, p.description, p.latitude, p.longitude,
+                p.district, p.block, p.panchayat_ward, p.landmark, p.site_address,
+                p.severity, p.status, p.created_at, c.category_name,
+                (6371 * acos(LEAST(1, GREATEST(-1,
+                  cos(radians($1)) * cos(radians(p.latitude)) *
+                  cos(radians(p.longitude) - radians($2)) +
+                  sin(radians($1)) * sin(radians(p.latitude))
+                )))) AS distance_km
+         FROM problems p
+         JOIN problem_categories c ON c.category_id = p.category_id
+         WHERE p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+       ) nearby
+       WHERE distance_km <= $3
+       ORDER BY distance_km ASC`,
+      [lat, lng, radiusKm]
+    );
+    res.json({ problems: rows });
+  } catch (err) {
+    console.error("GET /api/problems/nearby:", err);
+    res.status(500).json({ message: "Could not load nearby problems" });
+  }
+});
+
+// ---------------- Notifications ----------------
+app.get("/api/notifications", verifyToken, async (req, res) => {
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+    const { rows } = await pool.query(
+      `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC`,
+      [user.user_id]
+    );
+    res.json({ notifications: rows });
+  } catch (err) {
+    res.status(500).json({ message: "Could not load notifications" });
+  }
+});
+
+app.patch("/api/notifications/:id/read", verifyToken, async (req, res) => {
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+    const result = await pool.query(
+      `UPDATE notifications SET is_read = TRUE
+       WHERE notification_id = $1 AND user_id = $2 RETURNING *`,
+      [req.params.id, user.user_id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: "Notification not found" });
+    res.json({ notification: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ message: "Could not update notification" });
+  }
+});
+
+// ---------------- Feedback ----------------
+app.post("/api/problems/:problemId/feedback", verifyToken, async (req, res) => {
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+    const rating = Number(req.body?.rating);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: "rating must be an integer from 1 to 5" });
+    }
+    const result = await pool.query(
+      `INSERT INTO problem_feedback (problem_id, user_id, rating, comments)
+       VALUES ($1,$2,$3,$4) RETURNING *`,
+      [req.params.problemId, user.user_id, rating, clean(req.body?.comments) || null]
+    );
+    res.status(201).json({ feedback: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ message: "Could not save feedback", error: err.message });
+  }
+});
+
+// ---------------- Error handler ----------------
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ message: "Internal server error" });
+});
 
 const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

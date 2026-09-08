@@ -15,6 +15,10 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "firebase-admin": "^14.3.0",
+    "multer": "^2.3.0",
+    "oci-common": "^2.140.1",
+    "oci-objectstorage": "^2.140.1",
+    "oci-sdk": "^2.140.1",
     "pg": "^8.23.0"
   }
 }
