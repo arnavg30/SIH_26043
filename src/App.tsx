@@ -7,12 +7,25 @@ import {
   Phone, MessageSquare, Star, Settings, LogOut, Menu, X, TrendingUp,
   Layers, Heart, BookOpen, Lightbulb, Shield, AlertCircle, ChevronDown,
   BarChart3, PieChart, Activity, Leaf, Droplets, Zap, Wheat, Stethoscope,
-  School, Trash2, ThumbsUp, SendHorizontal, RefreshCw, Eye,
+  School, Trash2, ThumbsUp, SendHorizontal, RefreshCw, Eye, EyeOff, Lock,
   ClipboardList, HelpCircle, Volume2, UserCheck, Building, Factory, Edit2, Mail,
 } from "lucide-react";
 import { type Lang, LANG_NAMES, makeT } from "./i18n";
 import { NavJharLogo } from "./components/NavJharLogo";
 import { MitraAssistant } from "./components/MitraAssistant";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  reload,
+  signOut
+} from "firebase/auth";
+import { auth } from "./firebase/config";
+import {
+  syncAuth, getProfileMe,
+  saveCitizenProfile, savePanchayatProfile, saveLocalOrgProfile,
+  saveOrgProfile, saveIndustryProfile, saveUniProfile
+} from "./api";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 interface AppCtx {
@@ -358,14 +371,14 @@ function NavBar({ role, screen, onNav }: { role: string; screen: Screen; onNav: 
           </button>
 
           {/* Sign out */}
-          <button onClick={() => onNav("landing")}
-            className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium"
+          <button onClick={() => { signOut(auth).catch(() => {}); onNav("landing"); }}
+            className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
             style={{ background: "rgba(255,255,255,0.08)", color: "var(--nav-text)" }}>
             <LogOut size={13} /> {t("nav.logout")}
           </button>
 
           {/* Mobile menu */}
-          <button className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center"
+          <button className="md:hidden w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer"
             style={{ background: "rgba(255,255,255,0.08)", color: "var(--nav-text)" }}
             onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X size={16} /> : <Menu size={16} />}
@@ -379,7 +392,7 @@ function NavBar({ role, screen, onNav }: { role: string; screen: Screen; onNav: 
           {navItems.map(item => (
             <button key={item.screen + item.label}
               onClick={() => { onNav(item.screen); setMenuOpen(false); }}
-              className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium"
+              className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium cursor-pointer"
               style={item.isCTA ? {
                 color: "var(--navy)",
                 background: "var(--amber)",
@@ -388,8 +401,8 @@ function NavBar({ role, screen, onNav }: { role: string; screen: Screen; onNav: 
               {item.icon} {item.label}
             </button>
           ))}
-          <button onClick={() => onNav("landing")}
-            className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium border-t"
+          <button onClick={() => { signOut(auth).catch(() => {}); setMenuOpen(false); onNav("landing"); }}
+            className="w-full flex items-center gap-3 px-5 py-3 text-sm font-medium border-t cursor-pointer"
             style={{ color: "var(--nav-text)", borderColor: "rgba(255,255,255,0.08)" }}>
             <LogOut size={15} /> {t("nav.logout")}
           </button>
@@ -737,16 +750,249 @@ function SolverSelectScreen({ onNav }: { onNav: (s: Screen) => void }) {
   );
 }
 
+// ─── REUSABLE FIREBASE EMAIL & PASSWORD AUTH FORM ─────────────────────────────
+function EmailPasswordAuthForm({
+  email, setEmail,
+  password, setPassword,
+  authMode, setAuthMode,
+  showPassword, setShowPassword,
+  loading, errorMsg,
+  onSubmit,
+  emailPlaceholder = "name@example.com",
+  emailLabel = "Email Address",
+  emailHint = "Enter your email and password to authenticate",
+}: {
+  email: string; setEmail: (s: string) => void;
+  password: string; setPassword: (s: string) => void;
+  authMode: "signin" | "signup"; setAuthMode: (m: "signin" | "signup") => void;
+  showPassword: boolean; setShowPassword: (b: boolean | ((prev: boolean) => boolean)) => void;
+  loading: boolean; errorMsg: string;
+  onSubmit: (e: React.FormEvent) => void;
+  emailPlaceholder?: string;
+  emailLabel?: string;
+  emailHint?: string;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      {/* Sign In vs Sign Up Toggle Pills */}
+      <div className="flex p-1 rounded-xl border gap-1" style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
+        <button
+          type="button"
+          onClick={() => setAuthMode("signin")}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${authMode === "signin" ? "shadow-xs" : "opacity-60 hover:opacity-100"}`}
+          style={{
+            background: authMode === "signin" ? "var(--card)" : "transparent",
+            color: authMode === "signin" ? "var(--text)" : "var(--text-muted)",
+          }}>
+          Sign In
+        </button>
+        <button
+          type="button"
+          onClick={() => setAuthMode("signup")}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${authMode === "signup" ? "shadow-xs" : "opacity-60 hover:opacity-100"}`}
+          style={{
+            background: authMode === "signup" ? "var(--card)" : "transparent",
+            color: authMode === "signup" ? "var(--text)" : "var(--text-muted)",
+          }}>
+          Create Account
+        </button>
+      </div>
+
+      {/* Email Input */}
+      <div>
+        <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+          <Mail size={13} className="inline mr-1" color="var(--amber)" /> {emailLabel} <span style={{ color: "var(--error)" }}>*</span>
+        </label>
+        <input
+          type="email"
+          required
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder={emailPlaceholder}
+          className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
+          style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+        />
+        <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{emailHint}</p>
+      </div>
+
+      {/* Password Input */}
+      <div>
+        <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+          <Lock size={13} className="inline mr-1" color="var(--amber)" /> Password <span style={{ color: "var(--error)" }}>*</span>
+        </label>
+        <div className="relative">
+          <input
+            type={showPassword ? "text" : "password"}
+            required
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="At least 6 characters"
+            className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none pr-10 transition-all"
+            style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(p => !p)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100 cursor-pointer"
+            style={{ color: "var(--text)" }}>
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Error Alert */}
+      {errorMsg && (
+        <div className="p-3 rounded-xl flex items-start gap-2 text-xs"
+          style={{ background: "var(--error-bg)", color: "var(--error)", border: "1px solid var(--error)" }}>
+          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          <span className="leading-snug">{errorMsg}</span>
+        </div>
+      )}
+
+      {/* Submit Button */}
+      <Btn
+        type="submit"
+        disabled={loading}
+        className="w-full py-3 cursor-pointer"
+        icon={loading ? <Loader size={16} className="animate-spin" /> : <ArrowRight size={16} />}>
+        {loading ? "Authenticating..." : (authMode === "signin" ? "Sign In & Continue" : "Create Account & Continue")}
+      </Btn>
+
+      {/* Switch Helper */}
+      <div className="text-center text-xs" style={{ color: "var(--text-muted)" }}>
+        {authMode === "signin" ? (
+          <span>New user? <button type="button" onClick={() => setAuthMode("signup")} className="font-semibold underline cursor-pointer" style={{ color: "var(--navy)" }}>Create account</button></span>
+        ) : (
+          <span>Already registered? <button type="button" onClick={() => setAuthMode("signin")} className="font-semibold underline cursor-pointer" style={{ color: "var(--navy)" }}>Sign in here</button></span>
+        )}
+      </div>
+    </form>
+  );
+}
+
+function EmailVerificationGate({
+  email, onVerified, onBack,
+}: {
+  email: string;
+  onVerified: () => Promise<void>;
+  onBack: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const checkVerification = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      setErrorMsg("Your session has expired. Please sign in again.");
+      return;
+    }
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      await reload(user);
+      if (!auth.currentUser?.emailVerified) {
+        setErrorMsg("This email is not verified yet. Open the verification link in your inbox, then try again.");
+        return;
+      }
+      await onVerified();
+    } catch (err: any) {
+      setErrorMsg(err.message || "We could not check your verification status. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      setErrorMsg("Your session has expired. Please sign in again.");
+      return;
+    }
+    setLoading(true);
+    setErrorMsg("");
+    setMessage("");
+    try {
+      await sendEmailVerification(user);
+      setMessage(`A fresh verification link has been sent to ${email}.`);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Unable to resend the verification email right now.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 text-center">
+      <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center" style={{ background: "var(--success-bg)" }}>
+        <Mail size={22} color="var(--success)" />
+      </div>
+      <div>
+        <h2 className="font-bold text-base" style={{ color: "var(--text)" }}>Verify your email</h2>
+        <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+          We sent a verification link to <strong style={{ color: "var(--text)" }}>{email}</strong>. Open it, then return here to continue.
+        </p>
+      </div>
+      {message && <p className="p-2.5 rounded-xl text-xs" style={{ background: "var(--success-bg)", color: "var(--success)" }}>{message}</p>}
+      {errorMsg && <p className="p-2.5 rounded-xl text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>{errorMsg}</p>}
+      <Btn onClick={checkVerification} disabled={loading} className="w-full py-3" icon={loading ? <Loader size={16} className="animate-spin" /> : <CheckCircle size={16} />}>
+        {loading ? "Checking..." : "I verified my email — Continue"}
+      </Btn>
+      <button type="button" onClick={resendVerification} disabled={loading} className="w-full text-xs font-semibold underline cursor-pointer disabled:opacity-50" style={{ color: "var(--navy)" }}>
+        Resend verification email
+      </button>
+      <button type="button" onClick={onBack} disabled={loading} className="w-full text-xs cursor-pointer" style={{ color: "var(--text-muted)" }}>
+        Use a different email
+      </button>
+    </div>
+  );
+}
+
 // ─── GENERIC EMAIL LOGIN & PROFILE SETUP ──────────────────────────────────────
 function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen" }: {
   title: string; icon: React.ReactNode;
   onSuccess: () => void; onBack: () => void;
   profileType?: string;
 }) {
-  const { t } = useApp();
-  const [step, setStep] = useState<"email" | "profile">("email");
+  const { t, lang } = useApp();
+  const [step, setStep] = useState<"email" | "verify" | "profile">("email");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const [activeField, setActiveField] = useState<string>("name");
+
+  // Citizen Profile Form State
+  const [citName, setCitName] = useState("");
+  const [citPhone, setCitPhone] = useState("");
+  const [citGender, setCitGender] = useState("Male");
+  const [citDob, setCitDob] = useState("");
+  const [citHouse, setCitHouse] = useState("");
+  const [citCity, setCitCity] = useState("");
+  const [citPincode, setCitPincode] = useState("");
+  const [citLandmark, setCitLandmark] = useState("");
+  const [citDistrict, setCitDistrict] = useState("Ranchi");
+
+  // Panchayat Profile Form State
+  const [panchName, setPanchName] = useState("");
+  const [sarpanchName, setSarpanchName] = useState("");
+  const [panchPhone, setPanchPhone] = useState("");
+  const [panchAddress, setPanchAddress] = useState("");
+  const [panchDistrict, setPanchDistrict] = useState("Ranchi");
+  const [panchBlock, setPanchBlock] = useState("Namkum");
+  const [panchVillages, setPanchVillages] = useState("");
+
+  // Local Org Profile Form State
+  const [orgName, setOrgName] = useState("");
+  const [spocName, setSpocName] = useState("");
+  const [spocDesignation, setSpocDesignation] = useState("President / General Secretary");
+  const [orgPhone, setOrgPhone] = useState("");
+  const [orgAddress, setOrgAddress] = useState("");
+  const [orgDistrict, setOrgDistrict] = useState("Ranchi");
+  const [orgBlock, setOrgBlock] = useState("Ranchi Sadar");
+  const [orgArea, setOrgArea] = useState("");
 
   const getCitizenMitraMessage = () => {
     if (step === "email") return t("mitra.profile.email");
@@ -758,117 +1004,378 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
     return t("mitra.profile.default");
   };
 
+  const finishVerifiedAuthentication = async () => {
+    const profileTypeUpper = profileType === "panchayat" ? "PANCHAYAT" :
+      profileType === "localorg" ? "LOCAL_ORG" : "CITIZEN";
+    await syncAuth(profileTypeUpper, lang);
+    try {
+      const pRes = await getProfileMe();
+      if (pRes && pRes.profile) {
+        onSuccess();
+        return;
+      }
+    } catch {
+      // Profile does not exist yet; continue to profile setup.
+    }
+    setStep("profile");
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    if (!email.trim() || !password) {
+      setErrorMsg("Please enter both email and password.");
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMsg("Password must be at least 6 characters.");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (authMode === "signup") {
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      }
+      const user = auth.currentUser;
+      if (!user) throw new Error("Could not find the signed-in Firebase user.");
+      if (!user.emailVerified) {
+        if (authMode === "signup") await sendEmailVerification(user);
+        setStep("verify");
+        return;
+      }
+      await finishVerifiedAuthentication();
+    } catch (err: any) {
+      console.error("Firebase auth error:", err);
+      let msg = err.message || "Authentication failed.";
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
+        msg = "Invalid email or password. If you don't have an account yet, click 'Create Account'.";
+      } else if (err.code === "auth/email-already-in-use") {
+        msg = "This email is already registered. Please click 'Sign In' instead.";
+      } else if (err.code === "auth/invalid-email") {
+        msg = "Please enter a valid email address.";
+      } else if (err.code === "auth/weak-password") {
+        msg = "Password should be at least 6 characters.";
+      }
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      if (profileType === "panchayat") {
+        if (!panchName.trim() || !sarpanchName.trim() || !panchAddress.trim()) {
+          setErrorMsg("Please fill in all required fields marked with *");
+          setLoading(false);
+          return;
+        }
+        await savePanchayatProfile({
+          panchayatName: panchName,
+          sarpanchName,
+          district: panchDistrict,
+          block: panchBlock,
+          villagesCovered: panchVillages,
+          officeAddress: panchAddress,
+          officialPhone: panchPhone,
+        });
+      } else if (profileType === "localorg") {
+        if (!orgName.trim() || !spocName.trim() || !orgAddress.trim()) {
+          setErrorMsg("Please fill in all required fields marked with *");
+          setLoading(false);
+          return;
+        }
+        await saveLocalOrgProfile({
+          organizationName: orgName,
+          spocName,
+          designation: spocDesignation,
+          district: orgDistrict,
+          block: orgBlock,
+          panchayatArea: orgArea,
+          officeAddress: orgAddress,
+          organizationContact: orgPhone,
+        });
+      } else {
+        // Citizen
+        if (!citName.trim()) {
+          setErrorMsg("Name is required");
+          setLoading(false);
+          return;
+        }
+        await saveCitizenProfile({
+          name: citName,
+          gender: citGender,
+          dateOfBirth: citDob || undefined,
+          houseNumber: citHouse,
+          cityVillage: citCity,
+          pincode: citPincode,
+          landmark: citLandmark,
+          district: citDistrict,
+          residentialAddress: `${citHouse ? citHouse + ", " : ""}${citLandmark ? citLandmark + ", " : ""}${citCity || ""}, ${citDistrict || ""}, ${citPincode || ""}`.trim(),
+        });
+      }
+      onSuccess();
+    } catch (err: any) {
+      console.error("Profile save error:", err);
+      setErrorMsg(err.message || "Could not save profile. Please check your network and fields.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const ProfileForm = () => {
     if (profileType === "panchayat") {
       return (
-        <>
+        <form onSubmit={handleProfileSubmit}>
+          <div className="p-2.5 rounded-xl flex items-center gap-2 mb-4" style={{ background: "var(--success-bg)" }}>
+            <CheckCircle size={16} color="var(--success)" />
+            <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
+              Authenticated: {email}
+            </span>
+          </div>
+
           <h2 className="font-bold mb-4 text-base" style={{ color: "var(--text)" }}>
-            <UserCheck size={16} className="inline mr-1" /> Profile Setup
+            <UserCheck size={16} className="inline mr-1" /> Panchayat Profile Setup
           </h2>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
               Panchayat Name <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input placeholder="e.g. Ramgarh Gram Panchayat" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            <input
+              required
+              value={panchName}
+              onChange={e => setPanchName(e.target.value)}
+              placeholder="e.g. Ramgarh Gram Panchayat"
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
           </div>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
               Mukhiya / Sarpanch Name <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input placeholder="e.g. Rameshwar Soren" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            <input
+              required
+              value={sarpanchName}
+              onChange={e => setSarpanchName(e.target.value)}
+              placeholder="e.g. Rameshwar Soren"
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
           </div>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-              <Phone size={12} className="inline mr-1" /> Official Phone Number <span style={{ color: "var(--error)" }}>*</span>
+              <Phone size={12} className="inline mr-1" /> Official Phone Number
             </label>
             <div className="flex gap-2">
               <div className="px-3 py-2.5 rounded-xl text-sm font-medium border"
                 style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
-              <input type="tel" placeholder="98765 43210" className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+              <input
+                type="tel"
+                value={panchPhone}
+                onChange={e => setPanchPhone(e.target.value)}
+                placeholder="98765 43210"
+                className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
             </div>
           </div>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
               Office Address <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input placeholder="Panchayat Bhawan, Block Road" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            <input
+              required
+              value={panchAddress}
+              onChange={e => setPanchAddress(e.target.value)}
+              placeholder="Panchayat Bhawan, Block Road"
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
           </div>
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>District</label>
-            <input placeholder="e.g. Ranchi" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-          </div>
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Block</label>
-            <input placeholder="e.g. Namkum" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>District</label>
+              <input
+                value={panchDistrict}
+                onChange={e => setPanchDistrict(e.target.value)}
+                placeholder="e.g. Ranchi"
+                className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Block</label>
+              <input
+                value={panchBlock}
+                onChange={e => setPanchBlock(e.target.value)}
+                placeholder="e.g. Namkum"
+                className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
+            </div>
           </div>
           <div className="mb-4">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Village(s)</label>
-            <input placeholder="e.g. Rampur, Sitadih" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Village(s) Covered</label>
+            <input
+              value={panchVillages}
+              onChange={e => setPanchVillages(e.target.value)}
+              placeholder="e.g. Rampur, Sitadih"
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
           </div>
-          <Btn onClick={onSuccess} className="w-full">{t("profile.getstarted")} <ChevronRight size={16} /></Btn>
-        </>
+          {errorMsg && (
+            <div className="mb-3 p-2.5 rounded-xl flex items-center gap-2 text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>
+              <AlertCircle size={14} /> {errorMsg}
+            </div>
+          )}
+          <Btn type="submit" disabled={loading} className="w-full cursor-pointer" icon={loading ? <Loader size={16} className="animate-spin" /> : <ChevronRight size={16} />}>
+            {loading ? "Saving Profile..." : (t("profile.getstarted") || "Complete Setup")}
+          </Btn>
+        </form>
       );
     }
     if (profileType === "localorg") {
       return (
-        <>
+        <form onSubmit={handleProfileSubmit}>
+          <div className="p-2.5 rounded-xl flex items-center gap-2 mb-4" style={{ background: "var(--success-bg)" }}>
+            <CheckCircle size={16} color="var(--success)" />
+            <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
+              Authenticated: {email}
+            </span>
+          </div>
+
           <h2 className="font-bold mb-4 text-base" style={{ color: "var(--text)" }}>
-            <UserCheck size={16} className="inline mr-1" /> Profile Setup
+            <UserCheck size={16} className="inline mr-1" /> Organisation Profile Setup
           </h2>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
               Organisation Name <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input placeholder="e.g. Harmu Residents Welfare Association" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            <input
+              required
+              value={orgName}
+              onChange={e => setOrgName(e.target.value)}
+              placeholder="e.g. Harmu Residents Welfare Association"
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
           </div>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
               SPOC Name <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input placeholder="e.g. Sunil Kumar Singh" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            <input
+              required
+              value={spocName}
+              onChange={e => setSpocName(e.target.value)}
+              placeholder="e.g. Sunil Kumar Singh"
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
           </div>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-              SPOC Designation <span style={{ color: "var(--error)" }}>*</span>
+              SPOC Designation
             </label>
-            <input placeholder="e.g. General Secretary / President" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            <input
+              value={spocDesignation}
+              onChange={e => setSpocDesignation(e.target.value)}
+              placeholder="e.g. General Secretary / President"
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
           </div>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-              <Phone size={12} className="inline mr-1" /> SPOC / Official Phone Number <span style={{ color: "var(--error)" }}>*</span>
+              <Phone size={12} className="inline mr-1" /> Contact Phone Number
             </label>
             <div className="flex gap-2">
               <div className="px-3 py-2.5 rounded-xl text-sm font-medium border"
                 style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
-              <input type="tel" placeholder="98765 43210" className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+              <input
+                type="tel"
+                value={orgPhone}
+                onChange={e => setOrgPhone(e.target.value)}
+                placeholder="98765 43210"
+                className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
             </div>
           </div>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
               Office Address <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input placeholder="e.g. Community Center, Sector 4, Harmu Housing Colony" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            <input
+              required
+              value={orgAddress}
+              onChange={e => setOrgAddress(e.target.value)}
+              placeholder="e.g. Community Center, Sector 4, Harmu Housing Colony"
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
           </div>
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>District</label>
-            <input placeholder="e.g. Ranchi" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-          </div>
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Block</label>
-            <input placeholder="e.g. Ranchi Sadar" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>District</label>
+              <input
+                value={orgDistrict}
+                onChange={e => setOrgDistrict(e.target.value)}
+                placeholder="e.g. Ranchi"
+                className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Block</label>
+              <input
+                value={orgBlock}
+                onChange={e => setOrgBlock(e.target.value)}
+                placeholder="e.g. Ranchi Sadar"
+                className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
+            </div>
           </div>
           <div className="mb-4">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Panchayat / Area</label>
-            <input placeholder="e.g. Harmu Ward 26" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            <input
+              value={orgArea}
+              onChange={e => setOrgArea(e.target.value)}
+              placeholder="e.g. Harmu Ward 26"
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
           </div>
-          <Btn onClick={onSuccess} className="w-full">{t("profile.getstarted")} <ChevronRight size={16} /></Btn>
-        </>
+          {errorMsg && (
+            <div className="mb-3 p-2.5 rounded-xl flex items-center gap-2 text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>
+              <AlertCircle size={14} /> {errorMsg}
+            </div>
+          )}
+          <Btn type="submit" disabled={loading} className="w-full cursor-pointer" icon={loading ? <Loader size={16} className="animate-spin" /> : <ChevronRight size={16} />}>
+            {loading ? "Saving Profile..." : (t("profile.getstarted") || "Complete Setup")}
+          </Btn>
+        </form>
       );
     }
     
     // Default (Citizen)
     return (
-      <>
+      <form onSubmit={handleProfileSubmit}>
+        <div className="p-2.5 rounded-xl flex items-center gap-2 mb-4" style={{ background: "var(--success-bg)" }}>
+          <CheckCircle size={16} color="var(--success)" />
+          <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
+            Authenticated: {email}
+          </span>
+        </div>
+
         <h2 className="font-bold mb-4 text-base" style={{ color: "var(--text)" }}>
           <UserCheck size={16} className="inline mr-1" /> Profile Setup
         </h2>
@@ -877,6 +1384,9 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
             {t("profile.name")} <span style={{ color: "var(--error)" }}>*</span>
           </label>
           <input
+            required
+            value={citName}
+            onChange={e => setCitName(e.target.value)}
             onFocus={() => setActiveField("name")}
             placeholder="e.g. Ramesh Kumar"
             className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
@@ -885,13 +1395,15 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
         </div>
         <div className="mb-3">
           <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-            <Phone size={12} className="inline mr-1" /> {t("auth.mobile")} <span style={{ color: "var(--error)" }}>*</span>
+            <Phone size={12} className="inline mr-1" /> {t("auth.mobile")}
           </label>
           <div className="flex gap-2">
             <div className="px-3 py-2.5 rounded-xl text-sm font-medium border"
               style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
             <input
               type="tel"
+              value={citPhone}
+              onChange={e => setCitPhone(e.target.value)}
               placeholder="98765 43210"
               onFocus={() => setActiveField("phone")}
               className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none"
@@ -899,106 +1411,129 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
             />
           </div>
         </div>
-        <div className="mb-3">
-          <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-            {t("profile.gender")} <span style={{ color: "var(--error)" }}>*</span>
-          </label>
-          <select
-            onFocus={() => setActiveField("gender")}
-            className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-            style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}>
-            <option value="">Select…</option>
-            <option>Male</option>
-            <option>Female</option>
-            <option>Other</option>
-            <option>Prefer not to say</option>
-          </select>
-        </div>
-        <div className="mb-3">
-          <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-            {t("profile.dob")} <span style={{ color: "var(--error)" }}>*</span>
-          </label>
-          <input
-            type="date"
-            onFocus={() => setActiveField("dob")}
-            className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-            style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-          />
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              {t("profile.gender")}
+            </label>
+            <select
+              value={citGender}
+              onChange={e => setCitGender(e.target.value)}
+              onFocus={() => setActiveField("gender")}
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}>
+              <option>Male</option>
+              <option>Female</option>
+              <option>Other</option>
+              <option>Prefer not to say</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              {t("profile.dob")}
+            </label>
+            <input
+              type="date"
+              value={citDob}
+              onChange={e => setCitDob(e.target.value)}
+              onFocus={() => setActiveField("dob")}
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
+          </div>
         </div>
         <div className="mb-3">
           <p className="text-xs font-semibold mb-2 flex items-center gap-1" style={{ color: "var(--text)" }}>
-            <MapPin size={12} /> {t("profile.address")} <span style={{ color: "var(--error)" }}>*</span>
+            <MapPin size={12} /> {t("profile.address")}
           </p>
           <div className="space-y-2 pl-2 border-l-2" style={{ borderColor: "var(--border)" }}>
             <div className="relative">
-                <input
-                  onFocus={() => setActiveField("address")}
-                  placeholder={t("profile.housenumber")}
-                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
+              <input
+                value={citHouse}
+                onChange={e => setCitHouse(e.target.value)}
+                onFocus={() => setActiveField("address")}
+                placeholder={t("profile.housenumber") || "House / Flat No."}
+                className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
             </div>
-            <div className="relative">
-                <input
-                  onFocus={() => setActiveField("address")}
-                  placeholder={t("profile.city")}
-                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={citCity}
+                onChange={e => setCitCity(e.target.value)}
+                onFocus={() => setActiveField("address")}
+                placeholder={t("profile.city") || "City / Village"}
+                className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
+              <input
+                value={citDistrict}
+                onChange={e => setCitDistrict(e.target.value)}
+                onFocus={() => setActiveField("address")}
+                placeholder="District (e.g. Ranchi)"
+                className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
             </div>
-            <div className="relative">
-                <input
-                  onFocus={() => setActiveField("address")}
-                  placeholder={t("profile.pincode")}
-                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-            </div>
-            <div className="relative">
-                <input
-                  onFocus={() => setActiveField("address")}
-                  placeholder={t("profile.landmark")}
-                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={citPincode}
+                onChange={e => setCitPincode(e.target.value)}
+                onFocus={() => setActiveField("address")}
+                placeholder={t("profile.pincode") || "Pincode"}
+                className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
+              <input
+                value={citLandmark}
+                onChange={e => setCitLandmark(e.target.value)}
+                onFocus={() => setActiveField("address")}
+                placeholder={t("profile.landmark") || "Landmark"}
+                className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              />
             </div>
           </div>
         </div>
-        <Btn onClick={onSuccess} className="w-full">{t("profile.getstarted")} <ChevronRight size={16} /></Btn>
-      </>
+        {errorMsg && (
+          <div className="mb-3 p-2.5 rounded-xl flex items-center gap-2 text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>
+            <AlertCircle size={14} /> {errorMsg}
+          </div>
+        )}
+        <Btn type="submit" disabled={loading} className="w-full cursor-pointer" icon={loading ? <Loader size={16} className="animate-spin" /> : <ChevronRight size={16} />}>
+          {loading ? "Saving Profile..." : (t("profile.getstarted") || "Complete Profile")}
+        </Btn>
+      </form>
     );
   };
 
   const formCard = (
     <Card className="p-6">
       {step === "email" && (
-        <>
-          <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text)" }}>
-            <Mail size={15} className="inline mr-1" color="var(--amber)" /> {t("auth.email")} <span style={{ color: "var(--error)" }}>*</span>
-          </label>
-          <div className="mb-4">
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder={
-                profileType === "panchayat" ? "panchayat.bokaro@jharkhand.gov.in" :
-                profileType === "localorg" ? "contact@rwa-association.org" :
-                "citizen.jharkhand@gmail.com"
-              }
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
-              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-            />
-            <p className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
-              {t("auth.email_hint")}
-            </p>
-          </div>
-          <Btn onClick={() => setStep("profile")} className="w-full py-3" icon={<ArrowRight size={16} />}>
-            {t("auth.continue")}
-          </Btn>
-        </>
+        <EmailPasswordAuthForm
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          authMode={authMode}
+          setAuthMode={setAuthMode}
+          showPassword={showPassword}
+          setShowPassword={setShowPassword}
+          loading={loading}
+          errorMsg={errorMsg}
+          onSubmit={handleAuthSubmit}
+          emailPlaceholder={
+            profileType === "panchayat" ? "panchayat.bokaro@jharkhand.gov.in" :
+            profileType === "localorg" ? "contact@rwa-association.org" :
+            "citizen.jharkhand@gmail.com"
+          }
+          emailLabel={t("auth.email")}
+          emailHint="Enter your email and a password to authenticate"
+        />
       )}
-      {step === "profile" && <ProfileForm />}
+      {step === "verify" && <EmailVerificationGate email={email} onVerified={finishVerifiedAuthentication} onBack={() => setStep("email")} />}
+      {/* Call the local renderer directly so typing does not remount inputs. */}
+      {step === "profile" && ProfileForm()}
     </Card>
   );
 
@@ -1006,7 +1541,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
     <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
       {/* Top Header with Logo at Top-Left Corner */}
       <SimpleNavHeader onBack={() => {
-        if (step === "profile") setStep("email");
+        if (step === "profile" || step === "verify") setStep("email");
         else onBack();
       }} />
 
@@ -1021,7 +1556,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
                 variant="guide"
                 mitraHeight="h-72 sm:h-80"
                 message={getCitizenMitraMessage()}
-                subMessage={step === "email" ? t("auth.email_hint") : undefined}
+                subMessage={step === "email" ? "Enter your email & password to sign in or create an account" : undefined}
               />
             </div>
 
@@ -1048,6 +1583,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
     </div>
   );
 }
+
 // ─── CITIZEN LOGIN ─────────────────────────────────────────────────────────────
 function CitizenLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
@@ -1393,16 +1929,113 @@ function OrgVictimDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 }
 
 function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  const [step, setStep] = useState<"email" | "profile">("email");
+  const { t, lang } = useApp();
+  const [step, setStep] = useState<"email" | "verify" | "profile">("email");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Profile Form State
+  const [orgName, setOrgName] = useState("");
+  const [regNum, setRegNum] = useState("");
+  const [spocName, setSpocName] = useState("");
+  const [spocPhone, setSpocPhone] = useState("");
+  const [domain, setDomain] = useState("Community Development & Healthcare");
+  const [address, setAddress] = useState("");
+
+  const finishVerifiedAuthentication = async () => {
+    await syncAuth("ORGANIZATION", lang);
+    try {
+      const pRes = await getProfileMe();
+      if (pRes && pRes.profile) {
+        onNav("org-solver-dashboard");
+        return;
+      }
+    } catch {
+      // Profile does not exist yet; continue to profile setup.
+    }
+    setStep("profile");
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    if (!email.trim() || !password) {
+      setErrorMsg("Please enter both email and password.");
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMsg("Password must be at least 6 characters.");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (authMode === "signup") {
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      }
+      const user = auth.currentUser;
+      if (!user) throw new Error("Could not find the signed-in Firebase user.");
+      if (!user.emailVerified) {
+        if (authMode === "signup") await sendEmailVerification(user);
+        setStep("verify");
+        return;
+      }
+      await finishVerifiedAuthentication();
+    } catch (err: any) {
+      console.error("OrgSolver Auth Error:", err);
+      let msg = err.message || "Authentication failed.";
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
+        msg = "Invalid email or password. If this is your first time, click 'Create Account'.";
+      } else if (err.code === "auth/email-already-in-use") {
+        msg = "This email is already registered. Please sign in instead.";
+      } else if (err.code === "auth/invalid-email") {
+        msg = "Please enter a valid organisation email address.";
+      } else if (err.code === "auth/weak-password") {
+        msg = "Password should be at least 6 characters.";
+      }
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orgName.trim() || !spocName.trim() || !address.trim()) {
+      setErrorMsg("Please fill in all required fields marked with *");
+      return;
+    }
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      await saveOrgProfile({
+        organizationName: orgName,
+        registrationNumber: regNum,
+        spocName,
+        spocContact: spocPhone,
+        domain,
+        registeredAddress: address,
+      });
+      onNav("org-solver-dashboard");
+    } catch (err: any) {
+      console.error("Org Profile Save Error:", err);
+      setErrorMsg(err.message || "Failed to save organisation profile.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
       {/* Top Header with Logo at Top-Left Corner */}
       <SimpleNavHeader 
         onBack={() => {
-          if (step === "profile") setStep("email");
+          if (step === "profile" || step === "verify") setStep("email");
           else onNav("solver-select");
         }} 
         onNav={onNav} 
@@ -1420,7 +2053,7 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
               {step === "email" ? t("org.verify_email_title") : t("org.profile_setup")}
             </h1>
             <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              {step === "email" ? t("org.verify_email_sub") : "Professional Entity Onboarding"}
+              {step === "email" ? "Professional Entity Email Authentication" : "Professional Entity Onboarding"}
             </p>
           </div>
 
@@ -1432,35 +2065,32 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
           <Card className="p-6">
             {step === "email" && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    <Mail size={14} className="inline mr-1" color="var(--amber)" /> Organisation Official Email <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="e.g. contact@ranchitrust.org"
-                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                  <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
-                    Enter your registered NGO / non-profit / organisation email address.
-                  </p>
-                </div>
-                <Btn onClick={() => setStep("profile")} className="w-full py-3" icon={<ArrowRight size={16} />}>
-                  {t("auth.continue")}
-                </Btn>
-              </div>
+              <EmailPasswordAuthForm
+                email={email}
+                setEmail={setEmail}
+                password={password}
+                setPassword={setPassword}
+                authMode={authMode}
+                setAuthMode={setAuthMode}
+                showPassword={showPassword}
+                setShowPassword={setShowPassword}
+                loading={loading}
+                errorMsg={errorMsg}
+                onSubmit={handleAuthSubmit}
+                emailPlaceholder="e.g. contact@ranchitrust.org"
+                emailLabel="Organisation Official Email"
+                emailHint="Enter your registered NGO / non-profit / organisation email address."
+              />
             )}
 
+            {step === "verify" && <EmailVerificationGate email={email} onVerified={finishVerifiedAuthentication} onBack={() => setStep("email")} />}
+
             {step === "profile" && (
-              <div className="space-y-3.5">
+              <form onSubmit={handleProfileSubmit} className="space-y-3.5">
                 <div className="p-2.5 rounded-xl flex items-center gap-2" style={{ background: "var(--success-bg)" }}>
                   <CheckCircle size={16} color="var(--success)" />
                   <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
-                    Verified: {email || "contact@ranchitrust.org"}
+                    Authenticated: {email}
                   </span>
                 </div>
 
@@ -1470,40 +2100,84 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Organisation Name <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input placeholder="e.g. Ranchi Development Trust" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  <input
+                    required
+                    value={orgName}
+                    onChange={e => setOrgName(e.target.value)}
+                    placeholder="e.g. Ranchi Development Trust"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Registration Number (e.g., Darpan ID)</label>
-                  <input placeholder="e.g. JH/2021/012948" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  <input
+                    value={regNum}
+                    onChange={e => setRegNum(e.target.value)}
+                    placeholder="e.g. JH/2021/012948"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>SPOC Name <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input placeholder="Single Point of Contact name" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  <input
+                    required
+                    value={spocName}
+                    onChange={e => setSpocName(e.target.value)}
+                    placeholder="Single Point of Contact name"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number <span style={{ color: "var(--error)" }}>*</span>
+                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number
                   </label>
                   <div className="flex gap-2">
                     <div className="px-3 py-2 rounded-xl text-sm font-medium border"
                       style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
-                    <input placeholder="98765 43210" className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                    <input
+                      type="tel"
+                      value={spocPhone}
+                      onChange={e => setSpocPhone(e.target.value)}
+                      placeholder="98765 43210"
+                      className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none"
+                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                    />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Official Organisation Email <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input defaultValue={email || "contact@ranchitrust.org"} readOnly className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-                </div>
-                <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Domain <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input placeholder="e.g. Education, Healthcare, Water Management, Rural Development..." className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  <input
+                    required
+                    value={domain}
+                    onChange={e => setDomain(e.target.value)}
+                    placeholder="e.g. Education, Healthcare, Water Management, Rural Development..."
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
                 </div>
                 <div className="mb-2">
                   <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Registered Office Address <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input placeholder="Full registered office address" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  <input
+                    required
+                    value={address}
+                    onChange={e => setAddress(e.target.value)}
+                    placeholder="Full registered office address"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
                 </div>
-                <Btn onClick={() => onNav("org-solver-dashboard")} className="w-full mt-2" icon={<CheckCircle size={16} />}>Complete Registration</Btn>
-              </div>
+                {errorMsg && (
+                  <div className="p-2.5 rounded-xl flex items-center gap-2 text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>
+                    <AlertCircle size={14} /> {errorMsg}
+                  </div>
+                )}
+                <Btn type="submit" disabled={loading} className="w-full mt-2 cursor-pointer" icon={loading ? <Loader size={16} className="animate-spin" /> : <CheckCircle size={16} />}>
+                  {loading ? "Saving Profile..." : "Complete Registration"}
+                </Btn>
+              </form>
             )}
           </Card>
         </div>
@@ -1604,16 +2278,114 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 // ─── UNI / INDUSTRY LOGINS ────────────────────────────────────────────────────
 function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  const [step, setStep] = useState<"email" | "profile">("email");
+  const { t, lang } = useApp();
+  const [step, setStep] = useState<"email" | "verify" | "profile">("email");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Profile Form State
+  const [uniName, setUniName] = useState("");
+  const [aisheCode, setAisheCode] = useState("");
+  const [spocName, setSpocName] = useState("");
+  const [spocPhone, setSpocPhone] = useState("");
+  const [uniAddress, setUniAddress] = useState("");
+  const [expertise, setExpertise] = useState("Civil Engineering, IoT, Water Management");
+
+  const finishVerifiedAuthentication = async () => {
+    await syncAuth("UNIVERSITY", lang);
+    try {
+      const pRes = await getProfileMe();
+      if (pRes && pRes.profile) {
+        onNav("uni-dashboard");
+        return;
+      }
+    } catch {
+      // Profile does not exist yet; continue to profile setup.
+    }
+    setStep("profile");
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    if (!email.trim() || !password) {
+      setErrorMsg("Please enter both email and password.");
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMsg("Password must be at least 6 characters.");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (authMode === "signup") {
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      }
+      const user = auth.currentUser;
+      if (!user) throw new Error("Could not find the signed-in Firebase user.");
+      if (!user.emailVerified) {
+        if (authMode === "signup") await sendEmailVerification(user);
+        setStep("verify");
+        return;
+      }
+      await finishVerifiedAuthentication();
+    } catch (err: any) {
+      console.error("Uni Auth Error:", err);
+      let msg = err.message || "Authentication failed.";
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
+        msg = "Invalid email or password. If new, please click 'Create Account'.";
+      } else if (err.code === "auth/email-already-in-use") {
+        msg = "This institutional email is already registered. Please sign in.";
+      } else if (err.code === "auth/invalid-email") {
+        msg = "Please enter a valid email address.";
+      } else if (err.code === "auth/weak-password") {
+        msg = "Password should be at least 6 characters.";
+      }
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uniName.trim() || !spocName.trim() || !uniAddress.trim()) {
+      setErrorMsg("Please fill in all required fields marked with *");
+      return;
+    }
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      await saveUniProfile({
+        universityName: uniName,
+        aisheCode,
+        spocName,
+        spocNumber: spocPhone,
+        officialEmail: email,
+        institutionalAddress: uniAddress,
+        domainExpertise: expertise,
+      });
+      onNav("uni-dashboard");
+    } catch (err: any) {
+      console.error("Uni Profile Save Error:", err);
+      setErrorMsg(err.message || "Failed to save university profile.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
       {/* Top Header with Logo at Top-Left Corner */}
       <SimpleNavHeader 
         onBack={() => {
-          if (step === "profile") setStep("email");
+          if (step === "profile" || step === "verify") setStep("email");
           else onNav("solver-select");
         }} 
         onNav={onNav} 
@@ -1631,7 +2403,7 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
               {step === "email" ? t("uni.verify_email_title") : t("uni.profile_setup")}
             </h1>
             <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              {step === "email" ? t("uni.verify_email_sub") : "Professional & Academic Institution Registration"}
+              {step === "email" ? "Professional Institutional Email Authentication" : "Professional & Academic Institution Registration"}
             </p>
           </div>
 
@@ -1643,35 +2415,31 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
           <div className="rounded-2xl border p-6 shadow-sm" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
             {step === "email" && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    <Mail size={14} className="inline mr-1" color="var(--amber)" /> Institutional Official Email <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="e.g. registrar@bitmesra.ac.in"
-                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                  <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
-                    Please enter your official university / college email address.
-                  </p>
-                </div>
-                <Btn onClick={() => setStep("profile")} className="w-full py-3" icon={<ArrowRight size={16} />}>
-                  {t("auth.continue")}
-                </Btn>
-              </div>
+              <EmailPasswordAuthForm
+                email={email}
+                setEmail={setEmail}
+                password={password}
+                setPassword={setPassword}
+                authMode={authMode}
+                setAuthMode={setAuthMode}
+                showPassword={showPassword}
+                setShowPassword={setShowPassword}
+                loading={loading}
+                errorMsg={errorMsg}
+                onSubmit={handleAuthSubmit}
+                emailPlaceholder="e.g. registrar@bitmesra.ac.in"
+                emailLabel="Institutional Official Email"
+                emailHint="Please enter your official university / college email address."
+              />
             )}
+            {step === "verify" && <EmailVerificationGate email={email} onVerified={finishVerifiedAuthentication} onBack={() => setStep("email")} />}
 
             {step === "profile" && (
-              <div className="space-y-3.5">
+              <form onSubmit={handleProfileSubmit} className="space-y-3.5">
                 <div className="p-2.5 rounded-xl flex items-center gap-2" style={{ background: "var(--success-bg)" }}>
                   <CheckCircle size={16} color="var(--success)" />
                   <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
-                    Verified: {email || "registrar@bitmesra.ac.in"}
+                    Authenticated: {email}
                   </span>
                 </div>
 
@@ -1683,46 +2451,92 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
                   <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
                     University / Institute Name <span style={{ color: "var(--error)" }}>*</span>
                   </label>
-                  <input placeholder="e.g. BIT Mesra" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  <input
+                    required
+                    value={uniName}
+                    onChange={e => setUniName(e.target.value)}
+                    placeholder="e.g. BIT Mesra"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    AISHE Code (Optional)
+                  </label>
+                  <input
+                    value={aisheCode}
+                    onChange={e => setAisheCode(e.target.value)}
+                    placeholder="e.g. U-0294"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
                     SPOC Name <span style={{ color: "var(--error)" }}>*</span>
                   </label>
-                  <input placeholder="Single Point of Contact name" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  <input
+                    required
+                    value={spocName}
+                    onChange={e => setSpocName(e.target.value)}
+                    placeholder="Single Point of Contact / Dean R&D name"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number <span style={{ color: "var(--error)" }}>*</span>
+                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number
                   </label>
                   <div className="flex gap-2">
                     <div className="px-3 py-2 rounded-xl text-sm font-medium border"
                       style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
-                    <input placeholder="98765 43210" className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                    <input
+                      type="tel"
+                      value={spocPhone}
+                      onChange={e => setSpocPhone(e.target.value)}
+                      placeholder="98765 43210"
+                      className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none"
+                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                    />
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    Official Institutional Email <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input defaultValue={email || "registrar@bitmesra.ac.in"} readOnly className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
                     University Address <span style={{ color: "var(--error)" }}>*</span>
                   </label>
-                  <input placeholder="Full institutional address" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  <input
+                    required
+                    value={uniAddress}
+                    onChange={e => setUniAddress(e.target.value)}
+                    placeholder="Full institutional campus address"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
                 </div>
                 <div className="mb-2">
                   <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
                     Expertise Areas <span style={{ color: "var(--error)" }}>*</span>
                   </label>
-                  <input placeholder="e.g. Civil Engineering, Water Management, IoT, Agriculture..." className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  <input
+                    required
+                    value={expertise}
+                    onChange={e => setExpertise(e.target.value)}
+                    placeholder="e.g. Civil Engineering, Water Management, IoT, Agriculture..."
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
                 </div>
-                <Btn onClick={() => onNav("uni-dashboard")} className="w-full mt-3 py-3" icon={<CheckCircle size={16} />}>
-                  Register & Continue
+                {errorMsg && (
+                  <div className="p-2.5 rounded-xl flex items-center gap-2 text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>
+                    <AlertCircle size={14} /> {errorMsg}
+                  </div>
+                )}
+                <Btn type="submit" disabled={loading} className="w-full mt-3 py-3 cursor-pointer" icon={loading ? <Loader size={16} className="animate-spin" /> : <CheckCircle size={16} />}>
+                  {loading ? "Saving Profile..." : "Register & Continue"}
                 </Btn>
-              </div>
+              </form>
             )}
           </div>
         </div>
@@ -1732,16 +2546,116 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 }
 
 function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  const [step, setStep] = useState<"email" | "profile">("email");
+  const { t, lang } = useApp();
+  const [step, setStep] = useState<"email" | "verify" | "profile">("email");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Profile Form State
+  const [indName, setIndName] = useState("");
+  const [spocName, setSpocName] = useState("");
+  const [spocPhone, setSpocPhone] = useState("");
+  const [indType, setIndType] = useState("IoT & Hardware");
+  const [indAddress, setIndAddress] = useState("");
+  const [expertise, setExpertise] = useState("IoT, AgriTech, Manufacturing");
+  const [csrBudget, setCsrBudget] = useState("500000");
+
+  const finishVerifiedAuthentication = async () => {
+    await syncAuth("INDUSTRY", lang);
+    try {
+      const pRes = await getProfileMe();
+      if (pRes && pRes.profile) {
+        onNav("industry-dashboard");
+        return;
+      }
+    } catch {
+      // Profile does not exist yet; continue to profile setup.
+    }
+    setStep("profile");
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    if (!email.trim() || !password) {
+      setErrorMsg("Please enter both email and password.");
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMsg("Password must be at least 6 characters.");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (authMode === "signup") {
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
+      } else {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      }
+      const user = auth.currentUser;
+      if (!user) throw new Error("Could not find the signed-in Firebase user.");
+      if (!user.emailVerified) {
+        if (authMode === "signup") await sendEmailVerification(user);
+        setStep("verify");
+        return;
+      }
+      await finishVerifiedAuthentication();
+    } catch (err: any) {
+      console.error("Industry Auth Error:", err);
+      let msg = err.message || "Authentication failed.";
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
+        msg = "Invalid email or password. If new, please click 'Create Account'.";
+      } else if (err.code === "auth/email-already-in-use") {
+        msg = "This corporate email is already registered. Please sign in.";
+      } else if (err.code === "auth/invalid-email") {
+        msg = "Please enter a valid email address.";
+      } else if (err.code === "auth/weak-password") {
+        msg = "Password should be at least 6 characters.";
+      }
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!indName.trim() || !spocName.trim() || !indAddress.trim()) {
+      setErrorMsg("Please fill in all required fields marked with *");
+      return;
+    }
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      await saveIndustryProfile({
+        industryName: indName,
+        industryType: indType,
+        spocName,
+        phoneNumber: spocPhone,
+        officialEmail: email,
+        companyAddress: indAddress,
+        domainExpertise: expertise,
+        csrBudgetAvailable: csrBudget ? Number(csrBudget) : undefined,
+      });
+      onNav("industry-dashboard");
+    } catch (err: any) {
+      console.error("Industry Profile Save Error:", err);
+      setErrorMsg(err.message || "Failed to save industry profile.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
       {/* Top Header with Logo at Top-Left Corner */}
       <SimpleNavHeader 
         onBack={() => {
-          if (step === "profile") setStep("email");
+          if (step === "profile" || step === "verify") setStep("email");
           else onNav("solver-select");
         }} 
         onNav={onNav} 
@@ -1759,7 +2673,7 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
               {step === "email" ? t("ind.verify_email_title") : t("ind.profile_setup")}
             </h1>
             <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              {step === "email" ? t("ind.verify_email_sub") : "Professional Industry Partner Onboarding"}
+              {step === "email" ? "Corporate Partner Email Authentication" : "Professional Industry Partner Onboarding"}
             </p>
           </div>
 
@@ -1771,69 +2685,145 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
           <div className="rounded-2xl border p-6 shadow-sm" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
             {step === "email" && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    <Mail size={14} className="inline mr-1" color="var(--amber)" /> {t("ind.official_email")} <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="e.g. contact@techgrow.com"
-                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                  <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
-                    Please enter your official corporate/organization email.
-                  </p>
-                </div>
-                <Btn onClick={() => setStep("profile")} className="w-full py-3" icon={<ArrowRight size={16} />}>
-                  {t("auth.continue")}
-                </Btn>
-              </div>
+              <EmailPasswordAuthForm
+                email={email}
+                setEmail={setEmail}
+                password={password}
+                setPassword={setPassword}
+                authMode={authMode}
+                setAuthMode={setAuthMode}
+                showPassword={showPassword}
+                setShowPassword={setShowPassword}
+                loading={loading}
+                errorMsg={errorMsg}
+                onSubmit={handleAuthSubmit}
+                emailPlaceholder="e.g. contact@techgrow.com"
+                emailLabel={t("ind.official_email") || "Official Corporate Email"}
+                emailHint="Please enter your official corporate/organization email."
+              />
             )}
+            {step === "verify" && <EmailVerificationGate email={email} onVerified={finishVerifiedAuthentication} onBack={() => setStep("email")} />}
 
             {step === "profile" && (
-              <div className="space-y-3.5">
+              <form onSubmit={handleProfileSubmit} className="space-y-3.5">
                 <div className="p-2.5 rounded-xl flex items-center gap-2" style={{ background: "var(--success-bg)" }}>
                   <CheckCircle size={16} color="var(--success)" />
                   <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
-                    Verified: {email || "contact@techgrow.com"}
+                    Authenticated: {email}
                   </span>
                 </div>
 
-                {[
-                  { label: "Industry Name", ph: "e.g. TechGrow Solutions Pvt. Ltd.", req: true },
-                  { label: "SPOC Name", ph: "Single Point of Contact name", req: true },
-                  { label: "SPOC Contact Number", ph: "+91 98765 43210", req: true },
-                  { label: "Category", ph: "e.g. IoT, AgriTech, Water Technology, Manufacturing...", req: true },
-                  { label: "Address", ph: "Company registered address", req: true },
-                  { label: "Expertise Areas", ph: "e.g. IoT, AgriTech, Water Technology, Manufacturing...", req: true },
-                  { label: "Official Company Email", ph: email || "contact@techgrow.com", val: email || "contact@techgrow.com", req: true, readOnly: true },
-                ].map(f => (
-                  <div key={f.label}>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                      {f.label} {f.req && <span style={{ color: "var(--error)" }}>*</span>}
-                    </label>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    Industry / Corporate Name <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input
+                    required
+                    value={indName}
+                    onChange={e => setIndName(e.target.value)}
+                    placeholder="e.g. TechGrow Solutions Pvt. Ltd."
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    Industry Category / Type
+                  </label>
+                  <input
+                    value={indType}
+                    onChange={e => setIndType(e.target.value)}
+                    placeholder="e.g. IoT, AgriTech, Manufacturing..."
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    SPOC Name <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input
+                    required
+                    value={spocName}
+                    onChange={e => setSpocName(e.target.value)}
+                    placeholder="Single Point of Contact name"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="px-3 py-2 rounded-xl text-sm font-medium border"
+                      style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
                     <input
-                      defaultValue={f.val}
-                      placeholder={f.ph}
-                      readOnly={f.readOnly}
-                      className="w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all"
-                      style={{
-                        background: f.readOnly ? "var(--bg)" : "var(--input-bg)",
-                        borderColor: "var(--border)",
-                        color: "var(--text)"
-                      }}
+                      type="tel"
+                      value={spocPhone}
+                      onChange={e => setSpocPhone(e.target.value)}
+                      placeholder="98765 43210"
+                      className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none"
+                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
                     />
                   </div>
-                ))}
+                </div>
 
-                <Btn onClick={() => onNav("industry-dashboard")} className="w-full mt-2 py-3" icon={<CheckCircle size={16} />}>
-                  Register & Enter
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    Company Address <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input
+                    required
+                    value={indAddress}
+                    onChange={e => setIndAddress(e.target.value)}
+                    placeholder="Registered corporate address"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    Expertise Areas <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input
+                    required
+                    value={expertise}
+                    onChange={e => setExpertise(e.target.value)}
+                    placeholder="e.g. IoT, AgriTech, Water Technology, Hardware..."
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    CSR / Innovation Budget Available (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={csrBudget}
+                    onChange={e => setCsrBudget(e.target.value)}
+                    placeholder="e.g. 500000"
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+
+                {errorMsg && (
+                  <div className="p-2.5 rounded-xl flex items-center gap-2 text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>
+                    <AlertCircle size={14} /> {errorMsg}
+                  </div>
+                )}
+
+                <Btn type="submit" disabled={loading} className="w-full mt-2 py-3 cursor-pointer" icon={loading ? <Loader size={16} className="animate-spin" /> : <CheckCircle size={16} />}>
+                  {loading ? "Saving Profile..." : "Register & Enter"}
                 </Btn>
-              </div>
+              </form>
             )}
           </div>
         </div>
@@ -4250,7 +5240,7 @@ function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: stri
 
         {/* Quick Actions */}
         <div className="flex gap-3">
-          <button onClick={() => onNav("landing")}
+          <button onClick={() => { signOut(auth).catch(() => {}); onNav("landing"); }}
             className="flex-1 p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
             style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--error)" }}>
             <LogOut size={14} /> {t("nav.logout")}

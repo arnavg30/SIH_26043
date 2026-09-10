@@ -1,6 +1,9 @@
 import { auth } from "./firebase/config";
 
-const API_BASE = "http://localhost:5000";
+// Use a relative URL so the Vite proxy can forward preview requests to the
+// local backend. A browser inside the Figma preview cannot reach its own
+// `localhost:5000` directly.
+const API_BASE = "";
 
 export async function apiFetch(
   endpoint: string,
@@ -32,4 +35,110 @@ export async function apiFetch(
   }
 
   return data;
+}
+
+export async function syncAuth(profileType: string, languageCode: string = "en") {
+  return apiFetch("/api/auth/sync", {
+    method: "POST",
+    body: JSON.stringify({ profileType, languageCode }),
+  });
+}
+
+export async function getProfileMe() {
+  return apiFetch("/api/profile/me");
+}
+
+export async function saveCitizenProfile(data: {
+  name: string;
+  gender?: string;
+  dateOfBirth?: string;
+  houseNumber?: string;
+  cityVillage?: string;
+  pincode?: string;
+  landmark?: string;
+  district?: string;
+  residentialAddress?: string;
+}) {
+  return apiFetch("/api/profile/citizen", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function savePanchayatProfile(data: {
+  panchayatName: string;
+  sarpanchName: string;
+  district: string;
+  block: string;
+  villagesCovered?: string;
+  officeAddress: string;
+  officialPhone?: string;
+}) {
+  return apiFetch("/api/profile/panchayat", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function saveLocalOrgProfile(data: {
+  organizationName: string;
+  spocName: string;
+  designation?: string;
+  district?: string;
+  block?: string;
+  panchayatArea?: string;
+  officeAddress: string;
+  organizationContact?: string;
+}) {
+  return apiFetch("/api/profile/localorg", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function saveOrgProfile(data: {
+  organizationName: string;
+  registrationNumber?: string;
+  spocName: string;
+  spocContact?: string;
+  domain?: string;
+  domainExpertise?: string;
+  registeredAddress: string;
+}) {
+  return apiFetch("/api/profile/organization", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function saveIndustryProfile(data: {
+  industryName: string;
+  industryType?: string;
+  spocName: string;
+  designation?: string;
+  officialEmail?: string;
+  phoneNumber?: string;
+  domainExpertise?: string;
+  companyAddress: string;
+  csrBudgetAvailable?: number | string;
+}) {
+  return apiFetch("/api/profile/industry", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function saveUniProfile(data: {
+  universityName: string;
+  aisheCode?: string;
+  spocName: string;
+  spocNumber?: string;
+  officialEmail?: string;
+  institutionalAddress: string;
+  domainExpertise?: string;
+}) {
+  return apiFetch("/api/profile/university", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 }

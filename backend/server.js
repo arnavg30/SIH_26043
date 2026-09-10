@@ -339,6 +339,224 @@ app.put("/api/profile/panchayat", verifyToken, async (req, res) => {
   }
 });
 
+app.put("/api/profile/localorg", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+    if (user.sub_type !== "LOCAL_ORG") return res.status(403).json({ message: "Local Org profile required" });
+
+    const {
+      organizationName, spocName, designation = "Representative",
+      district, block, panchayatArea, officeAddress, organizationContact,
+    } = req.body || {};
+
+    if (!clean(organizationName)) return res.status(400).json({ message: "Organization name is required" });
+    if (!clean(spocName)) return res.status(400).json({ message: "SPOC name is required" });
+    if (!clean(officeAddress)) return res.status(400).json({ message: "Office address is required" });
+
+    await client.query("BEGIN");
+    const result = await client.query(
+      `INSERT INTO local_organizations
+        (user_id, organization_name, spoc_name, designation, district, block, panchayat_area, office_address, organization_contact)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (user_id) DO UPDATE SET
+        organization_name = EXCLUDED.organization_name,
+        spoc_name = EXCLUDED.spoc_name,
+        designation = EXCLUDED.designation,
+        district = EXCLUDED.district,
+        block = EXCLUDED.block,
+        panchayat_area = EXCLUDED.panchayat_area,
+        office_address = EXCLUDED.office_address,
+        organization_contact = EXCLUDED.organization_contact,
+        updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [
+        user.user_id,
+        clean(organizationName),
+        clean(spocName),
+        clean(designation) || "Representative",
+        clean(district) || "Ranchi",
+        clean(block) || "Ranchi Sadar",
+        clean(panchayatArea) || "",
+        clean(officeAddress),
+        clean(organizationContact) || user.phone_number || "",
+      ]
+    );
+    await client.query("COMMIT");
+    res.json({ message: "Local organization profile saved", profile: result.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/api/profile/localorg:", err);
+    res.status(500).json({ message: "Could not save local organization profile", error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.put("/api/profile/organization", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+    if (user.sub_type !== "ORGANIZATION") return res.status(403).json({ message: "Organization profile required" });
+
+    const {
+      organizationName, registrationNumber, spocName, spocContact,
+      domain = "Societal Innovation", domainExpertise, registeredAddress,
+    } = req.body || {};
+
+    if (!clean(organizationName)) return res.status(400).json({ message: "Organization name is required" });
+    if (!clean(spocName)) return res.status(400).json({ message: "SPOC name is required" });
+    if (!clean(registeredAddress)) return res.status(400).json({ message: "Registered address is required" });
+
+    await client.query("BEGIN");
+    const result = await client.query(
+      `INSERT INTO organizations
+        (user_id, organization_name, registration_number, spoc_name, spoc_contact, domain, domain_expertise, registered_address)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (user_id) DO UPDATE SET
+        organization_name = EXCLUDED.organization_name,
+        registration_number = EXCLUDED.registration_number,
+        spoc_name = EXCLUDED.spoc_name,
+        spoc_contact = EXCLUDED.spoc_contact,
+        domain = EXCLUDED.domain,
+        domain_expertise = EXCLUDED.domain_expertise,
+        registered_address = EXCLUDED.registered_address,
+        updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [
+        user.user_id,
+        clean(organizationName),
+        clean(registrationNumber) || null,
+        clean(spocName),
+        clean(spocContact) || user.phone_number || "",
+        clean(domain) || "Societal Innovation",
+        clean(domainExpertise) || "",
+        clean(registeredAddress),
+      ]
+    );
+    await client.query("COMMIT");
+    res.json({ message: "Organization profile saved", profile: result.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/api/profile/organization:", err);
+    res.status(500).json({ message: "Could not save organization profile", error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.put("/api/profile/industry", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+    if (user.sub_type !== "INDUSTRY") return res.status(403).json({ message: "Industry profile required" });
+
+    const {
+      industryName, industryType = "Technology", spocName, designation,
+      officialEmail, phoneNumber, domainExpertise, companyAddress, csrBudgetAvailable,
+    } = req.body || {};
+
+    if (!clean(industryName)) return res.status(400).json({ message: "Industry name is required" });
+    if (!clean(spocName)) return res.status(400).json({ message: "SPOC name is required" });
+    if (!clean(companyAddress)) return res.status(400).json({ message: "Company address is required" });
+
+    await client.query("BEGIN");
+    const result = await client.query(
+      `INSERT INTO industries
+        (user_id, industry_name, industry_type, spoc_name, designation, official_email, phone_number, domain_expertise, company_address, csr_budget_available)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (user_id) DO UPDATE SET
+        industry_name = EXCLUDED.industry_name,
+        industry_type = EXCLUDED.industry_type,
+        spoc_name = EXCLUDED.spoc_name,
+        designation = EXCLUDED.designation,
+        official_email = EXCLUDED.official_email,
+        phone_number = EXCLUDED.phone_number,
+        domain_expertise = EXCLUDED.domain_expertise,
+        company_address = EXCLUDED.company_address,
+        csr_budget_available = EXCLUDED.csr_budget_available,
+        updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [
+        user.user_id,
+        clean(industryName),
+        clean(industryType) || "Technology",
+        clean(spocName),
+        clean(designation) || null,
+        clean(officialEmail) || user.email || "",
+        clean(phoneNumber) || null,
+        clean(domainExpertise) || "",
+        clean(companyAddress),
+        csrBudgetAvailable ? Number(csrBudgetAvailable) : null,
+      ]
+    );
+    await client.query("COMMIT");
+    res.json({ message: "Industry profile saved", profile: result.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/api/profile/industry:", err);
+    res.status(500).json({ message: "Could not save industry profile", error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.put("/api/profile/university", verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+    if (user.sub_type !== "UNIVERSITY") return res.status(403).json({ message: "University profile required" });
+
+    const {
+      universityName, aisheCode, spocName, spocNumber,
+      officialEmail, institutionalAddress, domainExpertise,
+    } = req.body || {};
+
+    if (!clean(universityName)) return res.status(400).json({ message: "University name is required" });
+    if (!clean(spocName)) return res.status(400).json({ message: "SPOC name is required" });
+    if (!clean(institutionalAddress)) return res.status(400).json({ message: "Institutional address is required" });
+
+    await client.query("BEGIN");
+    const result = await client.query(
+      `INSERT INTO universities
+        (user_id, university_name, aishe_code, spoc_name, spoc_number, official_email, institutional_address, domain_expertise)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (user_id) DO UPDATE SET
+        university_name = EXCLUDED.university_name,
+        aishe_code = EXCLUDED.aishe_code,
+        spoc_name = EXCLUDED.spoc_name,
+        spoc_number = EXCLUDED.spoc_number,
+        official_email = EXCLUDED.official_email,
+        institutional_address = EXCLUDED.institutional_address,
+        domain_expertise = EXCLUDED.domain_expertise,
+        updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [
+        user.user_id,
+        clean(universityName),
+        clean(aisheCode) || null,
+        clean(spocName),
+        clean(spocNumber) || "",
+        clean(officialEmail) || user.email || "",
+        clean(institutionalAddress),
+        clean(domainExpertise) || "",
+      ]
+    );
+    await client.query("COMMIT");
+    res.json({ message: "University profile saved", profile: result.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("/api/profile/university:", err);
+    res.status(500).json({ message: "Could not save university profile", error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ---------------- Categories ----------------
 app.get("/api/categories", async (req, res) => {
   try {
@@ -552,5 +770,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Internal server error" });
 });
 
-const PORT = process.env.PORT || 5000;
+// `PORT` belongs to the Vite/Figma preview (usually 8443). Keep the API on a
+// separate port and allow deployments to override it explicitly.
+const PORT = process.env.BACKEND_PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
