@@ -1,11 +1,4 @@
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  sendEmailVerification,
-} from "firebase/auth";
-import { auth } from "./firebase/config";
-import { apiFetch } from "./api";
-import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { useState, useEffect, createContext, useContext } from "react";
 import {
   Sun, Moon, Globe, ChevronRight, MapPin, Mic, MicOff, Keyboard,
   Camera, Upload, Video, Bell, User, Users, Building2, GraduationCap,
@@ -15,10 +8,11 @@ import {
   Layers, Heart, BookOpen, Lightbulb, Shield, AlertCircle, ChevronDown,
   BarChart3, PieChart, Activity, Leaf, Droplets, Zap, Wheat, Stethoscope,
   School, Trash2, ThumbsUp, SendHorizontal, RefreshCw, Eye,
-  ClipboardList, HelpCircle, Volume2, UserCheck, Building, Factory, Edit2,
+  ClipboardList, HelpCircle, Volume2, UserCheck, Building, Factory, Edit2, Mail,
 } from "lucide-react";
 import { type Lang, LANG_NAMES, makeT } from "./i18n";
 import { NavJharLogo } from "./components/NavJharLogo";
+import { MitraAssistant } from "./components/MitraAssistant";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 interface AppCtx {
@@ -62,7 +56,7 @@ type Screen =
   | "tracking" | "problems-near-me" | "report-for-someone"
   | "project-lifecycle" | "project-health"
   | "solution-repo" | "solution-detail"
-  | "impact-dashboard" | "notifications" | "feedback";
+  | "impact-dashboard" | "notifications" | "feedback" | "profile";
 
 // ─── Language Modal ───────────────────────────────────────────────────────────
 const LANGS: { code: Lang; native: string; name: string }[] = [
@@ -104,10 +98,39 @@ function LanguageModal({ onDone }: { onDone: (lang: Lang) => void }) {
           ))}
         </div>
         <button onClick={() => onDone(sel)}
-          className="w-full py-3 rounded-xl font-bold text-base transition-all active:scale-95"
+          className="w-full py-3 rounded-xl font-bold text-base transition-all active:scale-95 cursor-pointer shadow-md"
           style={{ background: "var(--amber)", color: "var(--navy)" }}>
-          Continue
+          {sel === "hi" ? "जारी रखें →" : sel === "sa" ? "Jari →" : "Continue →"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function MitraWelcomeModal({ onContinue }: { onContinue: () => void }) {
+  const { t, lang } = useApp();
+  const badgeLabel = lang === "hi" ? "मित्रा — आपकी डिजिटल सहायक" : lang === "sa" ? "Mitra — Apan Digital Sahayak" : "Mitra — Your Digital Guide";
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
+      <div className="w-full max-w-lg md:max-w-2xl rounded-3xl p-6 sm:p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
+        <MitraAssistant
+          size="full"
+          variant="welcome"
+          message={t("mitra.welcome.title")}
+          subMessage={t("mitra.welcome.sub")}
+          hint={t("mitra.welcome.hint")}
+          badgeText={badgeLabel}
+          action={
+            <button
+              onClick={onContinue}
+              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold text-base transition-all active:scale-95 shadow-md flex items-center justify-center gap-2 hover:opacity-95 cursor-pointer"
+              style={{ background: "var(--amber)", color: "var(--navy)" }}
+            >
+              <span>{t("mitra.welcome.btn") || t("lang.continue")}</span>
+              <ArrowRight size={18} />
+            </button>
+          }
+        />
       </div>
     </div>
   );
@@ -234,26 +257,26 @@ function NavBar({ role, screen, onNav }: { role: string; screen: Screen; onNav: 
       { label: t("cit.report"), screen: "report-step1", icon: <FileText size={15} /> },
       { label: t("cit.track"), screen: "tracking", icon: <MapPin size={15} /> },
       { label: t("cit.nearby"), screen: "problems-near-me", icon: <Map size={15} /> },
-      { label: t("notif.title"), screen: "notifications", icon: <Bell size={15} /> },
+      { label: t("nav.profile"), screen: "profile", icon: <User size={15} /> },
     ] : role === "panchayat" ? [
       { label: t("panch.problems"), screen: "panchayat-dashboard", icon: <Layers size={15} /> },
       { label: t("panch.report"), screen: "report-step1", icon: <FileText size={15} />, isCTA: true },
-      { label: t("notif.title"), screen: "notifications", icon: <Bell size={15} /> },
+      { label: t("nav.profile"), screen: "profile", icon: <User size={15} /> },
     ] : role === "localorg" || role === "org-victim" ? [
       { label: t("localorg.my_problems"), screen: "org-victim-dashboard", icon: <FileText size={15} /> },
       { label: t("localorg.area_problems"), screen: "problems-near-me", icon: <Map size={15} /> },
-      { label: t("notif.title"), screen: "notifications", icon: <Bell size={15} /> },
+      { label: t("nav.profile"), screen: "profile", icon: <User size={15} /> },
     ] : role === "university" ? [
       { label: "Challenges", screen: "uni-dashboard", icon: <Layers size={15} /> },
       { label: "Projects", screen: "project-lifecycle", icon: <Activity size={15} /> },
-      { label: t("notif.title"), screen: "notifications", icon: <Bell size={15} /> },
+      { label: t("nav.profile"), screen: "profile", icon: <User size={15} /> },
     ] : role === "industry" ? [
       { label: "Projects", screen: "industry-dashboard", icon: <Briefcase size={15} /> },
       { label: "Partnerships", screen: "partnership-form", icon: <Building2 size={15} /> },
-      { label: t("notif.title"), screen: "notifications", icon: <Bell size={15} /> },
+      { label: t("nav.profile"), screen: "profile", icon: <User size={15} /> },
     ] : role === "org-solver" || role === "org" ? [
       { label: t("org.dashboard"), screen: "org-solver-dashboard", icon: <Briefcase size={15} /> },
-      { label: t("notif.title"), screen: "notifications", icon: <Bell size={15} /> },
+      { label: t("nav.profile"), screen: "profile", icon: <User size={15} /> },
     ] : [];
 
   const homeScreen: Screen = getHomeDashboard(role);
@@ -264,7 +287,7 @@ function NavBar({ role, screen, onNav }: { role: string; screen: Screen; onNav: 
         {/* Logo */}
         <button onClick={() => onNav(homeScreen)} className="dark flex items-center flex-shrink-0 text-left cursor-pointer transition-transform active:scale-95">
           <div className="hidden sm:block">
-            <NavJharLogo variant="full" className="scale-75 -ml-3 origin-left" />
+            <NavJharLogo variant="full" />
           </div>
           <div className="sm:hidden">
             <NavJharLogo variant="icon" className="w-9 h-9" />
@@ -376,8 +399,8 @@ function NavBar({ role, screen, onNav }: { role: string; screen: Screen; onNav: 
   );
 }
 
-// ─── Bottom Mobile Nav (citizen) ──────────────────────────────────────────────
-function MobileNav({ onNav }: { onNav: (s: Screen) => void }) {
+// ─── Bottom Navigation (For all role dashboards) ─────────────────────────────
+function MobileNav({ onNav, activeScreen }: { onNav: (s: Screen) => void; activeScreen?: Screen }) {
   const { t, role } = useApp();
   const homeScreen = getHomeDashboard(role);
   return (
@@ -388,16 +411,75 @@ function MobileNav({ onNav }: { onNav: (s: Screen) => void }) {
         { icon: <FileText size={20} />, label: t("cit.report").split(" ")[0], screen: "report-step1" as Screen },
         { icon: <MapPin size={20} />, label: t("cit.track").split(" ")[0], screen: "tracking" as Screen },
         { icon: <Map size={20} />, label: "Near Me", screen: "problems-near-me" as Screen },
-        { icon: <Bell size={20} />, label: t("notif.title").split(" ")[0], screen: "notifications" as Screen },
+        { icon: <User size={20} />, label: t("nav.profile"), screen: "profile" as Screen },
       ] as const).map(n => (
         <button key={n.screen} onClick={() => onNav(n.screen)}
-          className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition-all"
-          style={{ color: "var(--text-muted)" }}>
+          className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition-all cursor-pointer active:scale-95"
+          style={{ color: activeScreen === n.screen ? "var(--amber)" : "var(--text-muted)" }}>
           {n.icon}
           <span className="text-xs font-medium">{n.label}</span>
         </button>
       ))}
     </div>
+  );
+}
+
+// ─── SIMPLE NAV HEADER (Consistent Top-Left Logo) ─────────────────────────────
+function SimpleNavHeader({ onBack, onNav }: { onBack?: () => void; onNav?: (s: Screen) => void }) {
+  const { t, dark, setDark, lang, setLang } = useApp();
+  const [langOpen, setLangOpen] = useState(false);
+
+  return (
+    <header className="sticky top-0 z-50 px-4 sm:px-6 h-14 flex items-center justify-between"
+      style={{ background: "var(--nav-bg)", boxShadow: "var(--shadow)" }}>
+      {/* Logo in Top-Left Corner (Just like Dashboard) */}
+      <button 
+        onClick={() => onNav ? onNav("landing") : (onBack ? onBack() : null)} 
+        className="dark flex items-center flex-shrink-0 text-left cursor-pointer transition-transform active:scale-95"
+      >
+        <div className="hidden sm:block">
+          <NavJharLogo variant="full" />
+        </div>
+        <div className="sm:hidden">
+          <NavJharLogo variant="icon" className="w-9 h-9" />
+        </div>
+      </button>
+
+      {/* Right controls: Back button & Theme toggle */}
+      <div className="flex items-center gap-2">
+        {onBack && (
+          <button onClick={onBack}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 cursor-pointer"
+            style={{ background: "rgba(255,255,255,0.1)", color: "var(--nav-text)" }}>
+            <ArrowLeft size={14} /> {t("btn.back")}
+          </button>
+        )}
+        <div className="relative">
+          <button onClick={() => setLangOpen(!langOpen)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+            style={{ background: "rgba(255,255,255,0.1)", color: "var(--nav-text)" }}>
+            <Globe size={13} /> {LANG_NAMES[lang]} <ChevronDown size={11} />
+          </button>
+          {langOpen && (
+            <div className="absolute right-0 top-full mt-1 w-36 rounded-xl border overflow-hidden z-50"
+              style={{ background: "var(--card)", borderColor: "var(--border)", boxShadow: "var(--shadow-lg)" }}>
+              {LANGS.map(l => (
+                <button key={l.code} onClick={() => { setLang(l.code); setLangOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs font-medium flex items-center justify-between cursor-pointer"
+                  style={{ color: "var(--text)", background: lang === l.code ? "var(--success-bg)" : "transparent" }}>
+                  {l.native} {lang === l.code && <CheckCircle size={12} color="var(--green)" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button onClick={() => setDark(!dark)}
+          className="w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer"
+          style={{ background: "rgba(255,255,255,0.1)", color: "var(--nav-text)" }}>
+          {dark ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
+      </div>
+    </header>
   );
 }
 
@@ -413,7 +495,7 @@ function LandingScreen({ onNav }: { onNav: (s: Screen) => void }) {
         style={{ background: "var(--nav-bg)", boxShadow: "var(--shadow)" }}>
         <div className="dark flex items-center">
           <div className="hidden sm:block">
-            <NavJharLogo variant="full" className="scale-75 -ml-3 origin-left" />
+            <NavJharLogo variant="full" />
           </div>
           <div className="sm:hidden">
             <NavJharLogo variant="icon" className="w-9 h-9" />
@@ -456,8 +538,9 @@ function LandingScreen({ onNav }: { onNav: (s: Screen) => void }) {
           style={{ background: "rgba(242,184,75,0.15)", color: "var(--amber)", border: "1px solid rgba(242,184,75,0.3)" }}>
           <Shield size={12} /> Government of Jharkhand — Official Platform
         </div>
-        <h1 className="text-5xl sm:text-6xl font-black text-white mb-2 tracking-tight leading-none">
-          NavJhar
+        <h1 className="text-5xl sm:text-6xl font-black mb-2 tracking-tight leading-none flex items-center justify-center">
+          <span className="text-[#F59E0B]">Nav</span>
+          <span className="text-[#4ade80]">Jhar</span>
         </h1>
         <p className="text-xl sm:text-2xl font-bold mb-1" style={{ color: "var(--amber)" }}>
           हर समस्या का नया समाधान
@@ -539,7 +622,7 @@ function LandingScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 // ─── VICTIM ROLE SELECTION ────────────────────────────────────────────────────
 function VictimSelectScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
+  const { t, lang } = useApp();
   const roles = [
     {
       icon: <User size={28} color="var(--green)" />, bg: "var(--success-bg)", accentColor: "var(--green)",
@@ -555,33 +638,49 @@ function VictimSelectScreen({ onNav }: { onNav: (s: Screen) => void }) {
     },
   ];
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8" style={{ background: "var(--bg)" }}>
-      <div className="w-full max-w-lg">
-        <button onClick={() => onNav("landing")} className="flex items-center gap-1.5 text-sm mb-6"
-          style={{ color: "var(--text-muted)" }}>
-          <ArrowLeft size={15} /> {t("btn.back")}
-        </button>
-        <div className="flex justify-center mb-5">
-          <NavJharLogo variant="full" className="scale-90" />
-        </div>
-        <h1 className="text-2xl font-black mb-1 text-center" style={{ color: "var(--text)" }}>{t("victim.who")}</h1>
-        <p className="text-sm mb-7" style={{ color: "var(--text-muted)" }}>
-          {t("landing.victim")}
-        </p>
-        <div className="space-y-3">
-          {roles.map(r => (
-            <button key={r.screen} onClick={() => onNav(r.screen)}
-              className="w-full p-5 rounded-2xl border-2 flex items-center gap-4 text-left transition-all card-hover active:scale-95"
-              style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
-                style={{ background: r.bg, border: `1.5px solid ${r.accentColor}` }}>{r.icon}</div>
-              <div className="flex-1">
-                <div className="font-bold text-base" style={{ color: "var(--text)" }}>{r.label}</div>
-                <div className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>{r.sub}</div>
-              </div>
-              <ChevronRight size={18} color="var(--text-muted)" />
-            </button>
-          ))}
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
+      {/* Top Header with Logo at Top-Left Corner */}
+      <SimpleNavHeader onBack={() => onNav("landing")} onNav={onNav} />
+
+      {/* Main Content Centered */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-5xl">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl sm:text-3xl font-black mb-1" style={{ color: "var(--text)" }}>{t("victim.who")}</h1>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              {t("landing.victim")}
+            </p>
+          </div>
+
+          <div className="flex flex-col lg:flex-row items-center lg:items-center justify-center gap-8">
+            {/* Mitra full body with speech bubble box on side */}
+            <div className="w-full max-w-md lg:w-96 shrink-0 flex justify-center">
+              <MitraAssistant
+                size="full"
+                variant="guide"
+                mitraHeight="h-72 sm:h-80"
+                message={t("mitra.identity.select")}
+                subMessage={lang === "hi" ? "कृपया अपनी सही श्रेणी चुनें" : "Please select your category to continue"}
+              />
+            </div>
+
+            {/* Role Selection Cards */}
+            <div className="w-full max-w-md space-y-3">
+              {roles.map(r => (
+                <button key={r.screen} onClick={() => onNav(r.screen)}
+                  className="w-full p-5 rounded-2xl border-2 flex items-center gap-4 text-left transition-all card-hover active:scale-95 cursor-pointer shadow-sm"
+                  style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: r.bg, border: `1.5px solid ${r.accentColor}` }}>{r.icon}</div>
+                  <div className="flex-1">
+                    <div className="font-bold text-base" style={{ color: "var(--text)" }}>{r.label}</div>
+                    <div className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>{r.sub}</div>
+                  </div>
+                  <ChevronRight size={18} color="var(--text-muted)" />
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -606,1281 +705,349 @@ function SolverSelectScreen({ onNav }: { onNav: (s: Screen) => void }) {
     },
   ];
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8" style={{ background: "var(--bg)" }}>
-      <div className="w-full max-w-lg">
-        <button onClick={() => onNav("landing")} className="flex items-center gap-1.5 text-sm mb-6"
-          style={{ color: "var(--text-muted)" }}>
-          <ArrowLeft size={15} /> {t("btn.back")}
-        </button>
-        <div className="flex justify-center mb-5">
-          <NavJharLogo variant="full" className="scale-90" />
-        </div>
-        <h1 className="text-2xl font-black mb-1 text-center" style={{ color: "var(--text)" }}>{t("solver.who")}</h1>
-        <p className="text-sm mb-7" style={{ color: "var(--text-muted)" }}>
-          {t("landing.solver")} — {t("landing.solver.sub")}
-        </p>
-        <div className="space-y-3">
-          {roles.map(r => (
-            <button key={r.screen} onClick={() => onNav(r.screen)}
-              className="w-full p-5 rounded-2xl border-2 flex items-center gap-4 text-left transition-all card-hover active:scale-95"
-              style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
-                style={{ background: r.bg }}>{r.icon}</div>
-              <div className="flex-1">
-                <div className="font-bold text-base" style={{ color: "var(--text)" }}>{r.label}</div>
-                <div className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>{r.sub}</div>
-              </div>
-              <ChevronRight size={18} color="var(--text-muted)" />
-            </button>
-          ))}
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
+      {/* Top Header with Logo at Top-Left Corner (Just like Dashboard) */}
+      <SimpleNavHeader onBack={() => onNav("landing")} onNav={onNav} />
+
+      {/* Main Content Centered */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-lg">
+          <h1 className="text-2xl sm:text-3xl font-black mb-1 text-center" style={{ color: "var(--text)" }}>{t("solver.who")}</h1>
+          <p className="text-sm mb-7 text-center" style={{ color: "var(--text-muted)" }}>
+            {t("landing.solver")} — {t("landing.solver.sub")}
+          </p>
+          <div className="space-y-3">
+            {roles.map(r => (
+              <button key={r.screen} onClick={() => onNav(r.screen)}
+                className="w-full p-5 rounded-2xl border-2 flex items-center gap-4 text-left transition-all card-hover active:scale-95 cursor-pointer"
+                style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: r.bg }}>{r.icon}</div>
+                <div className="flex-1">
+                  <div className="font-bold text-base" style={{ color: "var(--text)" }}>{r.label}</div>
+                  <div className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>{r.sub}</div>
+                </div>
+                <ChevronRight size={18} color="var(--text-muted)" />
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── EMAIL LOGIN / SIGNUP ─────────────────────────────────────────────────────
-function OTPLoginScreen({
-  title,
-  icon,
-  onSuccess,
-  onBack,
-  profileType = "citizen"
-}: {
-  title: string;
-  icon: React.ReactNode;
-  onSuccess: () => void;
-  onBack: () => void;
+// ─── GENERIC EMAIL LOGIN & PROFILE SETUP ──────────────────────────────────────
+function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen" }: {
+  title: string; icon: React.ReactNode;
+  onSuccess: () => void; onBack: () => void;
   profileType?: string;
 }) {
   const { t } = useApp();
-
-  const [step, setStep] = useState<"email" | "verify" | "profile">("email");
+  const [step, setStep] = useState<"email" | "profile">("email");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [isLogin, setIsLogin] = useState(false);
-  const [panchayatName, setPanchayatName] = useState("");
-  const [sarpanchName, setSarpanchName] = useState("");
-  const [officeAddress, setOfficeAddress] = useState("");
-  const [officialPhone, setOfficialPhone] = useState("");
-  const [panchayatDistrict, setPanchayatDistrict] = useState("");
-  const [panchayatBlock, setPanchayatBlock] = useState("");
-  const [villagesCovered, setVillagesCovered] = useState("");
-  const [name, setName] = useState("");
-  const [gender, setGender] = useState("");
-  const [dateOfBirth, setDateOfBirth] = useState("");
-  const [houseNumber, setHouseNumber] = useState("");
-  const [cityVillage, setCityVillage] = useState("");
-  const [pincode, setPincode] = useState("");
-  const [landmark, setLandmark] = useState("");
+  const [activeField, setActiveField] = useState<string>("name");
 
-  // ─── EMAIL LOGIN / SIGNUP ──────────────────────────────────────────────────
-  const handleEmailAuth = async () => {
-    if (!email || !password) {
-      setError("Please enter email and password.");
-      return;
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError("");
-
-      if (isLogin) {
-        // ─── LOGIN ───────────────────────────────────────────────────────────
-        const result = await signInWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-
-        // Check email verification
-        if (!result.user.emailVerified) {
-          setError(
-            "Please verify your email first. Check your inbox and click the verification link."
-          );
-          return;
-        }
-
-        // Get Firebase ID token
-        const token = await result.user.getIdToken();
-
-        console.log("Firebase login successful:", result.user.uid);
-
-        // Test backend authentication
-        try {
-          const response = await fetch(
-            "http://localhost:5000/api/auth/sync",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                profileType: profileType === "localorg" ? "LOCAL_ORG" : profileType,
-                languageCode: "en",
-              }),
-            }
-          );
-
-          const data = await response.json();
-
-          console.log("Backend response:", data);
-
-          if (!response.ok) {
-            setError(data.message || "Backend authentication failed.");
-            return;
-          }
-        } catch (backendError) {
-          console.error("Backend connection error:", backendError);
-          setError(
-            "Logged in, but could not connect to the backend."
-          );
-          return;
-        }
-
-        setStep("profile");
-      } else {
-        // ─── SIGN UP ──────────────────────────────────────────────────────────
-        const result = await createUserWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-
-        // Send verification email
-        await sendEmailVerification(result.user);
-
-        console.log("Verification email sent to:", email);
-
-        setStep("verify");
-      }
-    } catch (err: any) {
-      console.error("Firebase authentication error:", err);
-
-      if (err.code === "auth/email-already-in-use") {
-        setError(
-          "This email is already registered. Please login instead."
-        );
-      } else if (err.code === "auth/invalid-email") {
-        setError("Please enter a valid email address.");
-      } else if (err.code === "auth/weak-password") {
-        setError("Password must be at least 6 characters.");
-      } else if (
-        err.code === "auth/invalid-credential" ||
-        err.code === "auth/wrong-password" ||
-        err.code === "auth/user-not-found"
-      ) {
-        setError("Incorrect email or password.");
-      } else {
-        setError(err.message || "Something went wrong.");
-      }
-    } finally {
-      setLoading(false);
-    }
+  const getCitizenMitraMessage = () => {
+    if (step === "email") return t("mitra.profile.email");
+    if (activeField === "phone") return t("mitra.profile.phone");
+    if (activeField === "name") return t("mitra.profile.name");
+    if (activeField === "gender") return t("mitra.profile.gender");
+    if (activeField === "dob") return t("mitra.profile.dob");
+    if (activeField === "address") return t("mitra.profile.address");
+    return t("mitra.profile.default");
   };
-
-  // ─── RESEND VERIFICATION EMAIL ─────────────────────────────────────────────
-  const resendVerificationEmail = async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      if (!auth.currentUser) {
-        setError("Please create your account again.");
-        return;
-      }
-
-      await sendEmailVerification(auth.currentUser);
-
-      setError("Verification email sent again. Please check your inbox.");
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Could not send verification email.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ─── CHECK EMAIL VERIFICATION ──────────────────────────────────────────────
-  const checkEmailVerification = async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      if (!auth.currentUser) {
-        setError("Please create an account first.");
-        return;
-      }
-
-      await auth.currentUser.reload();
-
-      if (!auth.currentUser.emailVerified) {
-        setError(
-          "Email is not verified yet. Please click the link in your email first."
-        );
-        return;
-      }
-
-      const token = await auth.currentUser.getIdToken(true);
-
-      console.log(
-        "Email verified successfully:",
-        auth.currentUser.uid
-      );
-
-      // Test backend authentication
-      try {
-        const response = await fetch(
-          "http://localhost:5000/api/auth/sync",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              profileType,
-              languageCode: "en",
-            }),
-          }
-        );
-
-        const data = await response.json();
-
-        console.log("Backend response:", data);
-
-        if (!response.ok) {
-          setError(data.message || "Backend authentication failed.");
-          return;
-        }
-      } catch (backendError) {
-        console.error("Backend connection error:", backendError);
-        setError(
-          "Email verified, but could not connect to the backend."
-        );
-        return;
-      }
-const profileResponse = await fetch(
-  "http://localhost:5000/api/profile/me",
-  {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  }
-);
-
-const profileData = await profileResponse.json();
-      setStep("profile");
-    } catch (err: any) {
-      console.error(err);
-      setError(
-        err.message || "Could not check email verification."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ─── PROFILE FORM ──────────────────────────────────────────────────────────
-  const saveCitizenProfile = async () => {
-  if (!name.trim()) {
-    setError("Name is required.");
-    return;
-  }
-
-  try {
-    setLoading(true);
-    setError("");
-
-    await apiFetch("/api/profile/citizen", {
-      method: "PUT",
-      body: JSON.stringify({
-        name,
-        gender: gender || null,
-        dateOfBirth: dateOfBirth || null,
-        houseNumber: houseNumber || null,
-        cityVillage: cityVillage || null,
-        pincode: pincode || null,
-        landmark: landmark || null,
-      }),
-    });
-
-    onSuccess();
-  } catch (err: any) {
-    console.error("Profile save error:", err);
-    setError(err.message || "Could not save profile.");
-  } finally {
-    setLoading(false);
-  }
-};
-
-const savePanchayatProfile = async () => {
-  if (!panchayatName.trim()) {
-    setError("Panchayat name is required.");
-    return;
-  }
-
-  if (!sarpanchName.trim()) {
-    setError("Sarpanch / Mukhiya name is required.");
-    return;
-  }
-
-  if (!panchayatDistrict.trim()) {
-    setError("District is required.");
-    return;
-  }
-
-  if (!panchayatBlock.trim()) {
-    setError("Block is required.");
-    return;
-  }
-
-  if (!officeAddress.trim()) {
-    setError("Office address is required.");
-    return;
-  }
-
-  try {
-    setLoading(true);
-    setError("");
-
-    await apiFetch("/api/profile/panchayat", {
-      method: "PUT",
-      body: JSON.stringify({
-        panchayatName,
-        sarpanchName,
-        district: panchayatDistrict,
-        block: panchayatBlock,
-        villagesCovered,
-        officeAddress,
-        officialPhone,
-      }),
-    });
-
-    onSuccess();
-  } catch (err: any) {
-    console.error("Panchayat profile save error:", err);
-    setError(err.message || "Could not save Panchayat profile.");
-  } finally {
-    setLoading(false);
-  }
-};
 
   const ProfileForm = () => {
     if (profileType === "panchayat") {
       return (
         <>
-          <h2
-            className="font-bold mb-4 text-base"
-            style={{ color: "var(--text)" }}
-          >
+          <h2 className="font-bold mb-4 text-base" style={{ color: "var(--text)" }}>
             <UserCheck size={16} className="inline mr-1" /> Profile Setup
           </h2>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Panchayat Name{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              Panchayat Name <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input
-              value={panchayatName}
-              onChange={(e) => setPanchayatName(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <input placeholder="e.g. Ramgarh Gram Panchayat" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Mukhiya / Sarpanch Name{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              Mukhiya / Sarpanch Name <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input
-              value={sarpanchName}
-              onChange={(e) => setSarpanchName(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <input placeholder="e.g. Rameshwar Soren" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Office Address{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              <Phone size={12} className="inline mr-1" /> Official Phone Number <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input
-              value={officeAddress}
-              onChange={(e) => setOfficeAddress(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <div className="flex gap-2">
+              <div className="px-3 py-2.5 rounded-xl text-sm font-medium border"
+                style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
+              <input type="tel" placeholder="98765 43210" className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            </div>
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Official Phone Number{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              Office Address <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input
-              value={officialPhone}
-              onChange={(e) => setOfficialPhone(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <input placeholder="Panchayat Bhawan, Block Road" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              District
-            </label>
-            <input
-              value={panchayatDistrict}
-              onChange={(e) => setPanchayatDistrict(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>District</label>
+            <input placeholder="e.g. Ranchi" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Block
-            </label>
-            <input
-              value={panchayatBlock}
-              onChange={(e) => setPanchayatBlock(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Block</label>
+            <input placeholder="e.g. Namkum" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Village(s)
-            </label>
-            <input
-              value={villagesCovered}
-              onChange={(e) => setVillagesCovered(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+          <div className="mb-4">
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Village(s)</label>
+            <input placeholder="e.g. Rampur, Sitadih" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
-          <Btn onClick={savePanchayatProfile} className="w-full">
-            {t("profile.getstarted")} <ChevronRight size={16} />
-          </Btn>
+          <Btn onClick={onSuccess} className="w-full">{t("profile.getstarted")} <ChevronRight size={16} /></Btn>
         </>
       );
     }
-
     if (profileType === "localorg") {
       return (
         <>
-          <h2
-            className="font-bold mb-4 text-base"
-            style={{ color: "var(--text)" }}
-          >
+          <h2 className="font-bold mb-4 text-base" style={{ color: "var(--text)" }}>
             <UserCheck size={16} className="inline mr-1" /> Profile Setup
           </h2>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Organisation Name{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              Organisation Name <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <input placeholder="e.g. Harmu Residents Welfare Association" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              SPOC Name{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              SPOC Name <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <input placeholder="e.g. Sunil Kumar Singh" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              SPOC Designation{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              SPOC Designation <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <input placeholder="e.g. General Secretary / President" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Office Address{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              <Phone size={12} className="inline mr-1" /> SPOC / Official Phone Number <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <div className="flex gap-2">
+              <div className="px-3 py-2.5 rounded-xl text-sm font-medium border"
+                style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
+              <input type="tel" placeholder="98765 43210" className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            </div>
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              District
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+              Office Address <span style={{ color: "var(--error)" }}>*</span>
             </label>
-            <input
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <input placeholder="e.g. Community Center, Sector 4, Harmu Housing Colony" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Block
-            </label>
-            <input
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>District</label>
+            <input placeholder="e.g. Ranchi" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
           <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Panchayat / Area
-            </label>
-            <input
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Block</label>
+            <input placeholder="e.g. Ranchi Sadar" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
           </div>
-
-          <Btn onClick={onSuccess} className="w-full">
-            {t("profile.getstarted")} <ChevronRight size={16} />
-          </Btn>
+          <div className="mb-4">
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Panchayat / Area</label>
+            <input placeholder="e.g. Harmu Ward 26" className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+          </div>
+          <Btn onClick={onSuccess} className="w-full">{t("profile.getstarted")} <ChevronRight size={16} /></Btn>
         </>
       );
     }
-
-    if (profileType === "university") {
-      return (
-        <>
-          <h2
-            className="font-bold mb-4 text-base"
-            style={{ color: "var(--text)" }}
-          >
-            <UserCheck size={16} className="inline mr-1" /> Profile Setup
-          </h2>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              University Name{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="e.g. BIT Mesra"
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              SPOC Name{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="Single Point of Contact name"
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              University Address{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="Full institutional address"
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Expertise Areas{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="e.g. Civil Engineering, Water Management, IoT, Agriculture..."
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              SPOC Number{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="+91 98765 43210"
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <Btn onClick={onSuccess} className="w-full">
-            {t("profile.getstarted")} <ChevronRight size={16} />
-          </Btn>
-        </>
-      );
-    }
-
-    if (profileType === "industry") {
-      return (
-        <>
-          <h2
-            className="font-bold mb-4 text-base"
-            style={{ color: "var(--text)" }}
-          >
-            <UserCheck size={16} className="inline mr-1" /> Profile Setup
-          </h2>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Industry Name{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="e.g. TechGrow Solutions Pvt. Ltd."
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              SPOC Name{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="Single Point of Contact name"
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Category{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="e.g. IoT, AgriTech, Construction..."
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Address{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="Company registered address"
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Expertise Areas{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="e.g. IoT, AgriTech, Water Technology, Manufacturing..."
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <div className="mb-3">
-            <label
-              className="block text-xs font-medium mb-1"
-              style={{ color: "var(--text)" }}
-            >
-              Official Company Email{" "}
-              <span style={{ color: "var(--error)" }}>*</span>
-            </label>
-            <input
-              placeholder="contact@techgrow.com"
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-              style={{
-                background: "var(--input-bg)",
-                borderColor: "var(--border)",
-                color: "var(--text)"
-              }}
-            />
-          </div>
-
-          <Btn onClick={onSuccess} className="w-full">
-            {t("profile.getstarted")} <ChevronRight size={16} />
-          </Btn>
-        </>
-      );
-    }
-
-    // ─── DEFAULT: CITIZEN / ORG ──────────────────────────────────────────────
+    
+    // Default (Citizen)
     return (
       <>
-        <h2
-          className="font-bold mb-4 text-base"
-          style={{ color: "var(--text)" }}
-        >
+        <h2 className="font-bold mb-4 text-base" style={{ color: "var(--text)" }}>
           <UserCheck size={16} className="inline mr-1" /> Profile Setup
         </h2>
-
         <div className="mb-3">
-          <label
-            className="block text-xs font-medium mb-1"
-            style={{ color: "var(--text)" }}
-          >
-            {t("profile.name")}{" "}
-            <span style={{ color: "var(--error)" }}>*</span>
+          <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+            {t("profile.name")} <span style={{ color: "var(--error)" }}>*</span>
           </label>
-         <input
-  value={name}
-  onChange={(e) => setName(e.target.value)}
-  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-  style={{
-    background: "var(--input-bg)",
-    borderColor: "var(--border)",
-    color: "var(--text)"
-  }}
-/>
-        </div>
-
-        <div className="mb-3">
-          <label
-            className="block text-xs font-medium mb-1"
-            style={{ color: "var(--text)" }}
-          >
-            {t("profile.gender")}{" "}
-            <span style={{ color: "var(--error)" }}>*</span>
-          </label>
-
-          <select
-            value={gender}
-            onChange={(e) => setGender(e.target.value)}
+          <input
+            onFocus={() => setActiveField("name")}
+            placeholder="e.g. Ramesh Kumar"
             className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-            style={{
-              background: "var(--input-bg)",
-              borderColor: "var(--border)",
-              color: "var(--text)"
-            }}
-          >
-            <option value="">Select.</option>
+            style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+          />
+        </div>
+        <div className="mb-3">
+          <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+            <Phone size={12} className="inline mr-1" /> {t("auth.mobile")} <span style={{ color: "var(--error)" }}>*</span>
+          </label>
+          <div className="flex gap-2">
+            <div className="px-3 py-2.5 rounded-xl text-sm font-medium border"
+              style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
+            <input
+              type="tel"
+              placeholder="98765 43210"
+              onFocus={() => setActiveField("phone")}
+              className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
+          </div>
+        </div>
+        <div className="mb-3">
+          <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+            {t("profile.gender")} <span style={{ color: "var(--error)" }}>*</span>
+          </label>
+          <select
+            onFocus={() => setActiveField("gender")}
+            className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+            style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}>
+            <option value="">Select…</option>
             <option>Male</option>
             <option>Female</option>
             <option>Other</option>
             <option>Prefer not to say</option>
           </select>
         </div>
-
         <div className="mb-3">
-          <label
-            className="block text-xs font-medium mb-1"
-            style={{ color: "var(--text)" }}
-          >
-            {t("profile.dob")}{" "}
-            <span style={{ color: "var(--error)" }}>*</span>
+          <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+            {t("profile.dob")} <span style={{ color: "var(--error)" }}>*</span>
           </label>
-
           <input
             type="date"
-            value={dateOfBirth}
-            onChange={(e) => setDateOfBirth(e.target.value)}
+            onFocus={() => setActiveField("dob")}
             className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-            style={{
-              background: "var(--input-bg)",
-              borderColor: "var(--border)",
-              color: "var(--text)"
-            }}
+            style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
           />
         </div>
-
         <div className="mb-3">
-          <p
-            className="text-xs font-semibold mb-2 flex items-center gap-1"
-            style={{ color: "var(--text)" }}
-          >
-            <MapPin size={12} /> {t("profile.address")}{" "}
-            <span style={{ color: "var(--error)" }}>*</span>
+          <p className="text-xs font-semibold mb-2 flex items-center gap-1" style={{ color: "var(--text)" }}>
+            <MapPin size={12} /> {t("profile.address")} <span style={{ color: "var(--error)" }}>*</span>
           </p>
-
-          <div
-            className="space-y-2 pl-2 border-l-2"
-            style={{ borderColor: "var(--border)" }}
-          >
+          <div className="space-y-2 pl-2 border-l-2" style={{ borderColor: "var(--border)" }}>
             <div className="relative">
-              <input
-                placeholder={t("profile.housenumber")}
-                value={houseNumber}
-                onChange={(e) => setHouseNumber(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                style={{
-                  background: "var(--input-bg)",
-                  borderColor: "var(--border)",
-                  color: "var(--text)"
-                }}
-              />
+                <input
+                  onFocus={() => setActiveField("address")}
+                  placeholder={t("profile.housenumber")}
+                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
             </div>
-
             <div className="relative">
-              <input
-                placeholder={t("profile.city")}
-                value={cityVillage}
-                onChange={(e) => setCityVillage(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                style={{
-                  background: "var(--input-bg)",
-                  borderColor: "var(--border)",
-                  color: "var(--text)"
-                }}
-              />
+                <input
+                  onFocus={() => setActiveField("address")}
+                  placeholder={t("profile.city")}
+                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
             </div>
-
             <div className="relative">
-              <input
-                placeholder={t("profile.pincode")}
-                value={pincode}
-                onChange={(e) => setPincode(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                style={{
-                  background: "var(--input-bg)",
-                  borderColor: "var(--border)",
-                  color: "var(--text)"
-                }}
-              />
+                <input
+                  onFocus={() => setActiveField("address")}
+                  placeholder={t("profile.pincode")}
+                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
             </div>
-
             <div className="relative">
-              <input
-                placeholder={t("profile.landmark")}
-                value={landmark}
-                onChange={(e) => setLandmark(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                style={{
-                  background: "var(--input-bg)",
-                  borderColor: "var(--border)",
-                  color: "var(--text)"
-                }}
-              />
+                <input
+                  onFocus={() => setActiveField("address")}
+                  placeholder={t("profile.landmark")}
+                  className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
             </div>
           </div>
         </div>
-
-        <Btn onClick={saveCitizenProfile} className="w-full">
-          {t("profile.getstarted")} <ChevronRight size={16} />
-        </Btn>
+        <Btn onClick={onSuccess} className="w-full">{t("profile.getstarted")} <ChevronRight size={16} /></Btn>
       </>
     );
   };
 
-  // ─── UI ────────────────────────────────────────────────────────────────────
+  const formCard = (
+    <Card className="p-6">
+      {step === "email" && (
+        <>
+          <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text)" }}>
+            <Mail size={15} className="inline mr-1" color="var(--amber)" /> {t("auth.email")} <span style={{ color: "var(--error)" }}>*</span>
+          </label>
+          <div className="mb-4">
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder={
+                profileType === "panchayat" ? "panchayat.bokaro@jharkhand.gov.in" :
+                profileType === "localorg" ? "contact@rwa-association.org" :
+                "citizen.jharkhand@gmail.com"
+              }
+              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            />
+            <p className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+              {t("auth.email_hint")}
+            </p>
+          </div>
+          <Btn onClick={() => setStep("profile")} className="w-full py-3" icon={<ArrowRight size={16} />}>
+            {t("auth.continue")}
+          </Btn>
+        </>
+      )}
+      {step === "profile" && <ProfileForm />}
+    </Card>
+  );
+
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-4 py-8"
-      style={{ background: "var(--bg)" }}
-    >
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
+      {/* Top Header with Logo at Top-Left Corner */}
+      <SimpleNavHeader onBack={() => {
+        if (step === "profile") setStep("email");
+        else onBack();
+      }} />
 
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-sm mb-6"
-          style={{ color: "var(--text-muted)" }}
-        >
-          <ArrowLeft size={15} /> {t("btn.back")}
-        </button>
-
-        <div className="text-center mb-6">
-
-          <div className="flex justify-center mb-3">
-            <NavJharLogo variant="full" className="scale-90" />
-          </div>
-
-          <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2"
-            style={{ background: "var(--navy)" }}
-          >
-            {icon}
-          </div>
-
-          <h1
-            className="text-xl font-black"
-            style={{ color: "var(--text)" }}
-          >
-            {title}
-          </h1>
-        </div>
-
-        <Card className="p-6">
-
-          {/* ─── EMAIL LOGIN / SIGNUP ─────────────────────────────────────── */}
-          {step === "email" && (
-            <>
-              <h2
-                className="font-semibold text-base mb-4"
-                style={{ color: "var(--text)" }}
-              >
-                {isLogin ? "Login" : "Create Account"}
-              </h2>
-
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "var(--text)" }}
-              >
-                Email Address
-              </label>
-
-              <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setError("");
-                }}
-                className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none mb-3"
-                style={{
-                  background: "var(--input-bg)",
-                  borderColor: "var(--border)",
-                  color: "var(--text)"
-                }}
+      {/* Main Content Centered */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+        {profileType === "citizen" ? (
+          <div className="w-full max-w-md lg:max-w-4xl flex flex-col lg:flex-row items-center lg:items-start justify-center gap-8">
+            {/* Mitra Full Body Guidance with Speech Bubble Box on Side */}
+            <div className="w-full max-w-md lg:w-96 shrink-0 flex justify-center">
+              <MitraAssistant
+                size="full"
+                variant="guide"
+                mitraHeight="h-72 sm:h-80"
+                message={getCitizenMitraMessage()}
+                subMessage={step === "email" ? t("auth.email_hint") : undefined}
               />
+            </div>
 
-              <label
-                className="block text-sm font-medium mb-1"
-                style={{ color: "var(--text)" }}
-              >
-                Password
-              </label>
-
-              <input
-                type="password"
-                placeholder="Minimum 6 characters"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setError("");
-                }}
-                className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none mb-4"
-                style={{
-                  background: "var(--input-bg)",
-                  borderColor: "var(--border)",
-                  color: "var(--text)"
-                }}
-              />
-
-              <Btn
-                onClick={handleEmailAuth}
-                className="w-full"
-              >
-                {loading
-                  ? "Please wait..."
-                  : isLogin
-                    ? "Login"
-                    : "Create Account"}
-              </Btn>
-
-              {error && (
-                <p
-                  className="text-xs text-center mt-3"
-                  style={{ color: "var(--error)" }}
-                >
-                  {error}
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsLogin(!isLogin);
-                  setError("");
-                }}
-                className="w-full text-xs mt-4"
-                style={{ color: "var(--green)" }}
-              >
-                {isLogin
-                  ? "Don't have an account? Create one"
-                  : "Already have an account? Login"}
-              </button>
-            </>
-          )}
-
-          {/* ─── EMAIL VERIFICATION ───────────────────────────────────────── */}
-          {step === "verify" && (
-            <>
-              <div className="text-center mb-5">
-
-                <div className="text-3xl mb-2">
-                  📧
-                </div>
-
-                <h2
-                  className="font-semibold"
-                  style={{ color: "var(--text)" }}
-                >
-                  Verify Your Email
-                </h2>
-
-                <p
-                  className="text-xs mt-2"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  We sent a verification link to:
-                </p>
-
-                <p
-                  className="text-sm font-semibold mt-1 break-all"
-                  style={{ color: "var(--green)" }}
-                >
-                  {email}
-                </p>
+            <div className="w-full max-w-md">
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-sm"
+                  style={{ background: "var(--navy)" }}>{icon}</div>
+                <h1 className="text-xl font-black" style={{ color: "var(--text)" }}>{title}</h1>
               </div>
-
-              <p
-                className="text-xs text-center mb-4"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Open your email and click the verification link.
-                Then come back here and click the button below.
-              </p>
-
-              <Btn
-                onClick={checkEmailVerification}
-                className="w-full"
-              >
-                {loading
-                  ? "Checking..."
-                  : "I've Verified My Email"}
-              </Btn>
-
-              <button
-                type="button"
-                onClick={resendVerificationEmail}
-                disabled={loading}
-                className="w-full text-xs mt-4"
-                style={{
-                  color: "var(--green)",
-                  opacity: loading ? 0.5 : 1
-                }}
-              >
-                Resend Verification Email
-              </button>
-
-              {error && (
-                <p
-                  className="text-xs text-center mt-3"
-                  style={{ color: "var(--error)" }}
-                >
-                  {error}
-                </p>
-              )}
-            </>
-          )}
-
-          {/* ─── PROFILE ──────────────────────────────────────────────────── */}
-          {step === "profile" && ProfileForm()}
-
-        </Card>
+              {formCard}
+            </div>
+          </div>
+        ) : (
+          <div className="w-full max-w-md">
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-sm"
+                style={{ background: "var(--navy)" }}>{icon}</div>
+              <h1 className="text-xl font-black" style={{ color: "var(--text)" }}>{title}</h1>
+            </div>
+            {formCard}
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
 // ─── CITIZEN LOGIN ─────────────────────────────────────────────────────────────
 function CitizenLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
@@ -1923,35 +1090,7 @@ function OrgVictimLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 // ─── CITIZEN DASHBOARD ────────────────────────────────────────────────────────
 function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
-
   const { t } = useApp();
-
-  const [profile, setProfile] = useState<any>(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
-
-useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const user = auth.currentUser;
-
-        if (!user) {
-          setLoadingProfile(false);
-          return;
-        }
-
-        const data = await apiFetch("/api/profile/me");
-
-        setProfile(data.profile);
-      } catch (error) {
-        console.error("Profile load error:", error);
-      } finally {
-        setLoadingProfile(false);
-      }
-    };
-
-    loadProfile();
-  }, []);  
-  
   const statuses = [
     { icon: <SendHorizontal size={20} />, val: "3", key: "cit.submitted", color: "#1D4ED8" },
     { icon: <Clock size={20} />, val: "2", key: "cit.underreview", color: "var(--warning)" },
@@ -1966,23 +1105,10 @@ useEffect(() => {
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-xs" style={{ color: "rgba(255,255,255,0.55)" }}>{t("cit.namaste")}</p>
-            <h1 className="text-xl font-black text-white">
-  {loadingProfile ? "Loading..." : `${profile?.name || "Citizen"}`}
-</h1>
-            <p
-  className="text-xs mt-0.5"
-  style={{ color: "rgba(255,255,255,0.45)" }}
->
-  {loadingProfile
-    ? "Loading address..."
-    : [
-        profile?.city_village,
-        profile?.district,
-        profile?.pincode,
-      ]
-        .filter(Boolean)
-        .join(", ") || "Address not added"}
-</p>
+            <h1 className="text-xl font-black text-white">Ram Kumar Ji</h1>
+            <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>
+              Bakri Bazar, Kanke, Ranchi
+            </p>
           </div>
           <button onClick={() => onNav("notifications")}
             className="relative w-10 h-10 rounded-xl flex items-center justify-center"
@@ -1990,6 +1116,18 @@ useEffect(() => {
             <Bell size={18} color="white" />
             <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: "var(--amber)" }} />
           </button>
+        </div>
+
+        {/* Compact Mitra Greeting */}
+        <div className="mb-4 p-3 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/15">
+          <MitraAssistant
+            size="compact"
+            variant="compact"
+            message={t("mitra.dash.greeting")}
+            subMessage={t("mitra.dash.hint")}
+            badgeText="Mitra • आपकी डिजिटल सहायक"
+            
+          />
         </div>
 
         {/* Primary CTA */}
@@ -2042,7 +1180,7 @@ useEffect(() => {
         </div>
 
         {/* Recent */}
-        <h2 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>My Recent Problems</h2>
+        <h2 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>{t("cit.myrecent")}</h2>
         {[
           { title: "Handpump kharab hai", loc: "Bakri Bazar", status: "in-progress", id: "JH-WTR-1024" },
           { title: "Road potholes near school", loc: "Kanke Chowk", status: "under-review", id: "JH-RD-982" },
@@ -2256,56 +1394,119 @@ function OrgVictimDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const [step, setStep] = useState<"email" | "profile">("email");
+  const [email, setEmail] = useState("");
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8" style={{ background: "var(--bg)" }}>
-      <div className="w-full max-w-md">
-        <button onClick={() => onNav("solver-select")} className="flex items-center gap-1.5 text-sm mb-6"
-          style={{ color: "var(--text-muted)" }}>
-          <ArrowLeft size={15} /> {t("btn.back")}
-        </button>
-        <div className="text-center mb-6">
-          <div className="flex justify-center mb-3">
-            <NavJharLogo variant="full" className="scale-90" />
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
+      {/* Top Header with Logo at Top-Left Corner */}
+      <SimpleNavHeader 
+        onBack={() => {
+          if (step === "profile") setStep("email");
+          else onNav("solver-select");
+        }} 
+        onNav={onNav} 
+      />
+
+      {/* Main Content Centered */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-6">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-sm"
+              style={{ background: "var(--navy)" }}>
+              <Briefcase size={24} color="var(--amber)" />
+            </div>
+            <h1 className="text-xl font-black" style={{ color: "var(--text)" }}>
+              {step === "email" ? t("org.verify_email_title") : t("org.profile_setup")}
+            </h1>
+            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+              {step === "email" ? t("org.verify_email_sub") : "Professional Entity Onboarding"}
+            </p>
           </div>
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2"
-            style={{ background: "var(--navy)" }}>
-            <Briefcase size={24} color="var(--amber)" />
+
+          {/* Step Indicator */}
+          <div className="flex gap-2 mb-5">
+            <div className="flex-1 h-1.5 rounded-full" style={{ background: "var(--navy)" }} />
+            <div className="flex-1 h-1.5 rounded-full" style={{ background: step === "profile" ? "var(--navy)" : "var(--border)" }} />
           </div>
-          <h1 className="text-xl font-black" style={{ color: "var(--text)" }}>Organisation Registration</h1>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            Professional Entity Onboarding
-          </p>
+
+          <Card className="p-6">
+            {step === "email" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    <Mail size={14} className="inline mr-1" color="var(--amber)" /> Organisation Official Email <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="e.g. contact@ranchitrust.org"
+                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                  <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
+                    Enter your registered NGO / non-profit / organisation email address.
+                  </p>
+                </div>
+                <Btn onClick={() => setStep("profile")} className="w-full py-3" icon={<ArrowRight size={16} />}>
+                  {t("auth.continue")}
+                </Btn>
+              </div>
+            )}
+
+            {step === "profile" && (
+              <div className="space-y-3.5">
+                <div className="p-2.5 rounded-xl flex items-center gap-2" style={{ background: "var(--success-bg)" }}>
+                  <CheckCircle size={16} color="var(--success)" />
+                  <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
+                    Verified: {email || "contact@ranchitrust.org"}
+                  </span>
+                </div>
+
+                <h2 className="font-bold mb-2 text-base" style={{ color: "var(--text)" }}>
+                  <Building2 size={16} className="inline mr-1" /> Organisation Profile
+                </h2>
+
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Organisation Name <span style={{ color: "var(--error)" }}>*</span></label>
+                  <input placeholder="e.g. Ranchi Development Trust" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Registration Number (e.g., Darpan ID)</label>
+                  <input placeholder="e.g. JH/2021/012948" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>SPOC Name <span style={{ color: "var(--error)" }}>*</span></label>
+                  <input placeholder="Single Point of Contact name" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
+                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="px-3 py-2 rounded-xl text-sm font-medium border"
+                      style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
+                    <input placeholder="98765 43210" className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Official Organisation Email <span style={{ color: "var(--error)" }}>*</span></label>
+                  <input defaultValue={email || "contact@ranchitrust.org"} readOnly className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Domain <span style={{ color: "var(--error)" }}>*</span></label>
+                  <input placeholder="e.g. Education, Healthcare, Water Management, Rural Development..." className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Registered Office Address <span style={{ color: "var(--error)" }}>*</span></label>
+                  <input placeholder="Full registered office address" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <Btn onClick={() => onNav("org-solver-dashboard")} className="w-full mt-2" icon={<CheckCircle size={16} />}>Complete Registration</Btn>
+              </div>
+            )}
+          </Card>
         </div>
-        <Card className="p-6">
-          <h2 className="font-bold mb-4 text-base" style={{ color: "var(--text)" }}>
-            <Building2 size={16} className="inline mr-1" /> Organisation Profile
-          </h2>
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Organisation Name <span style={{ color: "var(--error)" }}>*</span></label>
-            <input className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-          </div>
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Registration Number (e.g., Darpan ID)</label>
-            <input className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-          </div>
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>SPOC Name <span style={{ color: "var(--error)" }}>*</span></label>
-            <input className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-          </div>
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>SPOC Contact Number <span style={{ color: "var(--error)" }}>*</span></label>
-            <input className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-          </div>
-          <div className="mb-3">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Domain <span style={{ color: "var(--error)" }}>*</span></label>
-            <input placeholder="e.g. Education, Healthcare, Water Management, Rural Development..." className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-          </div>
-          <div className="mb-5">
-            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Registered Office Address <span style={{ color: "var(--error)" }}>*</span></label>
-            <input className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-          </div>
-          <Btn onClick={() => onNav("org-solver-dashboard")} className="w-full">Complete Registration <CheckCircle size={16} /></Btn>
-        </Card>
       </div>
     </div>
   );
@@ -2404,49 +1605,126 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── UNI / INDUSTRY LOGINS ────────────────────────────────────────────────────
 function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const [step, setStep] = useState<"email" | "profile">("email");
+  const [email, setEmail] = useState("");
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8" style={{ background: "var(--bg)" }}>
-      <div className="w-full max-w-md">
-        <button onClick={() => onNav("solver-select")} className="flex items-center gap-1.5 text-sm mb-6 transition-all active:scale-95"
-          style={{ color: "var(--text-muted)" }}>
-          <ArrowLeft size={15} /> {t("btn.back")}
-        </button>
-        <div className="text-center mb-6">
-          <div className="flex justify-center mb-3">
-            <NavJharLogo variant="full" className="scale-90" />
-          </div>
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-sm"
-            style={{ background: "var(--navy)" }}>
-            <GraduationCap size={24} color="var(--amber)" />
-          </div>
-          <h1 className="text-xl font-black" style={{ color: "var(--text)" }}>Institute / University</h1>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            Professional & Academic Registration
-          </p>
-        </div>
-        <div className="rounded-2xl border p-6 shadow-sm" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-          <h2 className="font-bold mb-4 text-base flex items-center gap-2" style={{ color: "var(--text)" }}>
-            <GraduationCap size={18} style={{ color: "var(--navy)" }} /> Institution Profile
-          </h2>
-          {[
-            { label: "University Name", ph: "e.g. BIT Mesra", req: true },
-            { label: "SPOC Name", ph: "Single Point of Contact name", req: true },
-            { label: "University Address", ph: "Full institutional address", req: true },
-            { label: "Expertise Areas", ph: "e.g. Civil Engineering, Water Management, IoT, Agriculture...", req: true },
-            { label: "SPOC Number", ph: "+91 98765 43210", req: true },
-          ].map(f => (
-            <div key={f.label} className="mb-3.5">
-              <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                {f.label} {f.req && <span style={{ color: "var(--error)" }}>*</span>}
-              </label>
-              <input placeholder={f.ph}
-                className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
-                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
+      {/* Top Header with Logo at Top-Left Corner */}
+      <SimpleNavHeader 
+        onBack={() => {
+          if (step === "profile") setStep("email");
+          else onNav("solver-select");
+        }} 
+        onNav={onNav} 
+      />
+
+      {/* Main Content Centered */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-6">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-sm"
+              style={{ background: "var(--navy)" }}>
+              <GraduationCap size={24} color="var(--amber)" />
             </div>
-          ))}
-          <Btn onClick={() => onNav("uni-dashboard")} className="w-full mt-3 py-3" icon={<CheckCircle size={16} />}>
-            Register & Continue
-          </Btn>
+            <h1 className="text-xl font-black" style={{ color: "var(--text)" }}>
+              {step === "email" ? t("uni.verify_email_title") : t("uni.profile_setup")}
+            </h1>
+            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+              {step === "email" ? t("uni.verify_email_sub") : "Professional & Academic Institution Registration"}
+            </p>
+          </div>
+
+          {/* Step Indicator */}
+          <div className="flex gap-2 mb-5">
+            <div className="flex-1 h-1.5 rounded-full" style={{ background: "var(--navy)" }} />
+            <div className="flex-1 h-1.5 rounded-full" style={{ background: step === "profile" ? "var(--navy)" : "var(--border)" }} />
+          </div>
+
+          <div className="rounded-2xl border p-6 shadow-sm" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+            {step === "email" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    <Mail size={14} className="inline mr-1" color="var(--amber)" /> Institutional Official Email <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="e.g. registrar@bitmesra.ac.in"
+                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                  <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
+                    Please enter your official university / college email address.
+                  </p>
+                </div>
+                <Btn onClick={() => setStep("profile")} className="w-full py-3" icon={<ArrowRight size={16} />}>
+                  {t("auth.continue")}
+                </Btn>
+              </div>
+            )}
+
+            {step === "profile" && (
+              <div className="space-y-3.5">
+                <div className="p-2.5 rounded-xl flex items-center gap-2" style={{ background: "var(--success-bg)" }}>
+                  <CheckCircle size={16} color="var(--success)" />
+                  <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
+                    Verified: {email || "registrar@bitmesra.ac.in"}
+                  </span>
+                </div>
+
+                <h2 className="font-bold mb-2 text-base flex items-center gap-2" style={{ color: "var(--text)" }}>
+                  <GraduationCap size={18} style={{ color: "var(--navy)" }} /> Institution Profile
+                </h2>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    University / Institute Name <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input placeholder="e.g. BIT Mesra" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    SPOC Name <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input placeholder="Single Point of Contact name" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="px-3 py-2 rounded-xl text-sm font-medium border"
+                      style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
+                    <input placeholder="98765 43210" className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    Official Institutional Email <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input defaultValue={email || "registrar@bitmesra.ac.in"} readOnly className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    University Address <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input placeholder="Full institutional address" className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                    Expertise Areas <span style={{ color: "var(--error)" }}>*</span>
+                  </label>
+                  <input placeholder="e.g. Civil Engineering, Water Management, IoT, Agriculture..." className="w-full px-3 py-2 rounded-xl border text-sm outline-none" style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+                </div>
+                <Btn onClick={() => onNav("uni-dashboard")} className="w-full mt-3 py-3" icon={<CheckCircle size={16} />}>
+                  Register & Continue
+                </Btn>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -2455,154 +1733,109 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
-  const [step, setStep] = useState<"email" | "code" | "profile">("email");
+  const [step, setStep] = useState<"email" | "profile">("email");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [resendNotice, setResendNotice] = useState(false);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8" style={{ background: "var(--bg)" }}>
-      <div className="w-full max-w-md">
-        <button onClick={() => {
-          if (step === "code") setStep("email");
-          else if (step === "profile") setStep("code");
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
+      {/* Top Header with Logo at Top-Left Corner */}
+      <SimpleNavHeader 
+        onBack={() => {
+          if (step === "profile") setStep("email");
           else onNav("solver-select");
-        }} className="flex items-center gap-1.5 text-sm mb-6 transition-all active:scale-95"
-          style={{ color: "var(--text-muted)" }}>
-          <ArrowLeft size={15} /> {t("btn.back")}
-        </button>
+        }} 
+        onNav={onNav} 
+      />
 
-        <div className="text-center mb-6">
-          <div className="flex justify-center mb-3">
-            <NavJharLogo variant="full" className="scale-90" />
-          </div>
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-sm"
-            style={{ background: "var(--navy)" }}>
-            <Factory size={24} color="var(--amber)" />
-          </div>
-          <h1 className="text-xl font-black" style={{ color: "var(--text)" }}>
-            {step === "email" ? t("ind.verify_email_title") :
-             step === "code" ? t("ind.enter_code_title") :
-             t("ind.profile_setup")}
-          </h1>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            {step === "email" ? t("ind.verify_email_sub") :
-             step === "code" ? t("ind.enter_code_sub") :
-             "Professional Industry Partner Onboarding"}
-          </p>
-        </div>
-
-        {/* Step Indicator */}
-        <div className="flex gap-2 mb-5">
-          <div className="flex-1 h-1.5 rounded-full" style={{ background: "var(--navy)" }} />
-          <div className="flex-1 h-1.5 rounded-full" style={{ background: step !== "email" ? "var(--navy)" : "var(--border)" }} />
-          <div className="flex-1 h-1.5 rounded-full" style={{ background: step === "profile" ? "var(--navy)" : "var(--border)" }} />
-        </div>
-
-        <div className="rounded-2xl border p-6 shadow-sm" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-          {step === "email" && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                  {t("ind.official_email")} <span style={{ color: "var(--error)" }}>*</span>
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="e.g. contact@techgrow.com"
-                  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-                <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
-                  Please enter your official corporate/organization email.
-                </p>
-              </div>
-              <Btn onClick={() => setStep("code")} className="w-full py-3" icon={<ArrowRight size={16} />}>
-                {t("ind.send_code")}
-              </Btn>
+      {/* Main Content Centered */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-6">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-sm"
+              style={{ background: "var(--navy)" }}>
+              <Factory size={24} color="var(--amber)" />
             </div>
-          )}
+            <h1 className="text-xl font-black" style={{ color: "var(--text)" }}>
+              {step === "email" ? t("ind.verify_email_title") : t("ind.profile_setup")}
+            </h1>
+            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+              {step === "email" ? t("ind.verify_email_sub") : "Professional Industry Partner Onboarding"}
+            </p>
+          </div>
 
-          {step === "code" && (
-            <div className="space-y-4">
-              <div className="p-3 rounded-xl flex items-center justify-between" style={{ background: "#EFF6FF" }}>
-                <span className="text-xs font-semibold" style={{ color: "var(--navy)" }}>{email || "contact@techgrow.com"}</span>
-                <button onClick={() => setStep("email")} className="text-xs underline font-medium" style={{ color: "var(--navy)" }}>Change</button>
-              </div>
+          {/* Step Indicator */}
+          <div className="flex gap-2 mb-5">
+            <div className="flex-1 h-1.5 rounded-full" style={{ background: "var(--navy)" }} />
+            <div className="flex-1 h-1.5 rounded-full" style={{ background: step === "profile" ? "var(--navy)" : "var(--border)" }} />
+          </div>
 
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                  {t("ind.enter_code_title")} <span style={{ color: "var(--error)" }}>*</span>
-                </label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={code}
-                  onChange={e => setCode(e.target.value)}
-                  placeholder="e.g. 582914"
-                  className="w-full px-3 py-2.5 rounded-xl border text-base tracking-widest text-center font-mono font-bold outline-none transition-all"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-
-              {resendNotice && (
-                <p className="text-xs text-center font-medium" style={{ color: "var(--success)" }}>
-                  Verification code resent to your official company email!
-                </p>
-              )}
-
-              <div className="flex gap-2">
-                <Btn variant="secondary" onClick={() => setResendNotice(true)} className="px-4 text-xs">
-                  {t("ind.resend_btn")}
-                </Btn>
-                <Btn onClick={() => setStep("profile")} className="flex-1 py-3" icon={<CheckCircle size={16} />}>
-                  {t("ind.verify_btn")}
-                </Btn>
-              </div>
-            </div>
-          )}
-
-          {step === "profile" && (
-            <div className="space-y-3.5">
-              <div className="p-2.5 rounded-xl flex items-center gap-2" style={{ background: "var(--success-bg)" }}>
-                <CheckCircle size={16} color="var(--success)" />
-                <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
-                  Verified: {email || "contact@techgrow.com"}
-                </span>
-              </div>
-
-              {[
-                { label: "Industry Name", ph: "e.g. TechGrow Solutions Pvt. Ltd.", req: true },
-                { label: "SPOC Name", ph: "Single Point of Contact name", req: true },
-                { label: "Category", ph: "e.g. IoT, AgriTech, Water Technology, Manufacturing...", req: true },
-                { label: "Address", ph: "Company registered address", req: true },
-                { label: "Expertise Areas", ph: "e.g. IoT, AgriTech, Water Technology, Manufacturing...", req: true },
-                { label: "Official Company Email", ph: email || "contact@techgrow.com", val: email || "contact@techgrow.com", req: true, readOnly: true },
-              ].map(f => (
-                <div key={f.label}>
+          <div className="rounded-2xl border p-6 shadow-sm" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+            {step === "email" && (
+              <div className="space-y-4">
+                <div>
                   <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    {f.label} {f.req && <span style={{ color: "var(--error)" }}>*</span>}
+                    <Mail size={14} className="inline mr-1" color="var(--amber)" /> {t("ind.official_email")} <span style={{ color: "var(--error)" }}>*</span>
                   </label>
                   <input
-                    defaultValue={f.val}
-                    placeholder={f.ph}
-                    readOnly={f.readOnly}
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all"
-                    style={{
-                      background: f.readOnly ? "var(--bg)" : "var(--input-bg)",
-                      borderColor: "var(--border)",
-                      color: "var(--text)"
-                    }}
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="e.g. contact@techgrow.com"
+                    className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none transition-all"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
                   />
+                  <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
+                    Please enter your official corporate/organization email.
+                  </p>
                 </div>
-              ))}
+                <Btn onClick={() => setStep("profile")} className="w-full py-3" icon={<ArrowRight size={16} />}>
+                  {t("auth.continue")}
+                </Btn>
+              </div>
+            )}
 
-              <Btn onClick={() => onNav("industry-dashboard")} className="w-full mt-2 py-3" icon={<CheckCircle size={16} />}>
-                Register & Enter
-              </Btn>
-            </div>
-          )}
+            {step === "profile" && (
+              <div className="space-y-3.5">
+                <div className="p-2.5 rounded-xl flex items-center gap-2" style={{ background: "var(--success-bg)" }}>
+                  <CheckCircle size={16} color="var(--success)" />
+                  <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
+                    Verified: {email || "contact@techgrow.com"}
+                  </span>
+                </div>
+
+                {[
+                  { label: "Industry Name", ph: "e.g. TechGrow Solutions Pvt. Ltd.", req: true },
+                  { label: "SPOC Name", ph: "Single Point of Contact name", req: true },
+                  { label: "SPOC Contact Number", ph: "+91 98765 43210", req: true },
+                  { label: "Category", ph: "e.g. IoT, AgriTech, Water Technology, Manufacturing...", req: true },
+                  { label: "Address", ph: "Company registered address", req: true },
+                  { label: "Expertise Areas", ph: "e.g. IoT, AgriTech, Water Technology, Manufacturing...", req: true },
+                  { label: "Official Company Email", ph: email || "contact@techgrow.com", val: email || "contact@techgrow.com", req: true, readOnly: true },
+                ].map(f => (
+                  <div key={f.label}>
+                    <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
+                      {f.label} {f.req && <span style={{ color: "var(--error)" }}>*</span>}
+                    </label>
+                    <input
+                      defaultValue={f.val}
+                      placeholder={f.ph}
+                      readOnly={f.readOnly}
+                      className="w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all"
+                      style={{
+                        background: f.readOnly ? "var(--bg)" : "var(--input-bg)",
+                        borderColor: "var(--border)",
+                        color: "var(--text)"
+                      }}
+                    />
+                  </div>
+                ))}
+
+                <Btn onClick={() => onNav("industry-dashboard")} className="w-full mt-2 py-3" icon={<CheckCircle size={16} />}>
+                  Register & Enter
+                </Btn>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -2610,48 +1843,25 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 }
 
 // ─── REPORT STEP 1 ────────────────────────────────────────────────────────────
-function ReportStep1Screen({
-  onNav,
-  reportData,
-  setReportData,
-  mediaFiles,
-  setMediaFiles,
-}: {
-onNav: (s: Screen) => void;
-reportData: {
-  description: string;
-  category: string;
-  district: string;
-  block: string;
-  panchayatWard: string;
-  landmark: string;
-  siteAddress: string;
-  latitude: string;
-  longitude: string;
-};
-setReportData: React.Dispatch<React.SetStateAction<typeof reportData>>;
-mediaFiles: File[];
-setMediaFiles: React.Dispatch<React.SetStateAction<File[]>>;
-}) {
+function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
-  const [desc, setDesc] = useState(reportData.description);
+  const [desc, setDesc] = useState("");
   const [mode, setMode] = useState<"none" | "voice" | "text">("none");
-  const [selCat, setSelCat] = useState<string | null>(reportData.category || null);
-  const [categories, setCategories] = useState<{ category_id: number; category_name: string }[]>([]);
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
+  const [selCat, setSelCat] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
 
-  useEffect(() => {
-  apiFetch("/api/categories")
-    .then(data => setCategories(data.categories || []))
-    .catch(err => console.error(err));
-}, []);
-const cats = categories.map(c => ({
-  id: c.category_id,
-  icon: <Layers size={18} />,
-  label: c.category_name,
-}));
+  const cats = [
+    { icon: <Wheat size={18} />, label: "Agriculture" },
+    { icon: <Droplets size={18} />, label: "Water" },
+    { icon: <Stethoscope size={18} />, label: "Healthcare" },
+    { icon: <School size={18} />, label: "Education" },
+    { icon: <Navigation size={18} />, label: "Roads" },
+    { icon: <Trash2 size={18} />, label: "Sanitation" },
+    { icon: <Leaf size={18} />, label: "Environment" },
+    { icon: <Zap size={18} />, label: "Electricity" },
+    { icon: <Building size={18} />, label: "Public Services" },
+    { icon: <Layers size={18} />, label: "Other" },
+  ];
 
   const StepDots = () => (
     <div className="flex items-center gap-1">
@@ -2683,23 +1893,29 @@ const cats = categories.map(c => ({
       </div>
 
       <div className="px-4 py-5">
-        
+        {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
+        {role === "citizen" && (
+          <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
+            <MitraAssistant
+              size="compact"
+              variant="compact"
+              message={listening ? t("mitra.rep.step1.listening") : t("mitra.rep.step1")}
+              subMessage={listening ? "बोलना जारी रखें..." : "Tap mic to speak or select category below"}
+            />
+          </div>
+        )}
 
         <h2 className="font-semibold text-sm mb-3" style={{ color: "var(--text)" }}>
           {t("rep.step1.category")}
         </h2>
         <div className="grid grid-cols-5 gap-2 mb-6">
-{cats.map(c => (
-  <button key={c.id} onClick={() => {
-    const value = selCat === String(c.id) ? null : String(c.id);
-    setSelCat(value);
-    setReportData(prev => ({ ...prev, category: value || "" }));
-  }}
+          {cats.map(c => (
+            <button key={c.label} onClick={() => setSelCat(selCat === c.label ? null : c.label)}
               className="flex flex-col items-center p-2 rounded-xl border-2 transition-all active:scale-95"
               style={{
-                borderColor: selCat === String(c.id) ? "var(--green)" : "var(--border)",
-                background: selCat === String(c.id) ? "var(--success-bg)" : "var(--card)",
-                color: selCat === String(c.id) ? "var(--green)" : "var(--text-muted)"
+                borderColor: selCat === c.label ? "var(--green)" : "var(--border)",
+                background: selCat === c.label ? "var(--success-bg)" : "var(--card)",
+                color: selCat === c.label ? "var(--green)" : "var(--text-muted)"
               }}>
               {c.icon}
               <span className="text-xs mt-1 text-center leading-tight"
@@ -2709,7 +1925,7 @@ const cats = categories.map(c => ({
         </div>
 
         <h2 className="font-semibold text-sm mb-3" style={{ color: "var(--text)" }}>
-          Describe the problem <span style={{ color: "var(--error)" }}>*</span>
+          {t("rep.step1.describe")} <span style={{ color: "var(--error)" }}>*</span>
         </h2>
         <div className="flex gap-3 mb-4">
           <button onClick={() => { setMode(mode === "voice" ? "none" : "voice"); setListening(false); }}
@@ -2742,7 +1958,7 @@ const cats = categories.map(c => ({
                   style={{ background: "var(--green)" }}>
                   <Mic size={30} color="white" />
                 </button>
-                <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>Tap to start speaking</p>
+                <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>{t("rep.step1.tap_to_speak")}</p>
               </>
             ) : (
               <>
@@ -2754,112 +1970,44 @@ const cats = categories.map(c => ({
                   <div className="absolute inset-0 rounded-full pulse-ring border-2"
                     style={{ borderColor: "var(--green)" }} />
                 </div>
-                <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>Listening…</p>
+                <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>{t("rep.step1.listening_text")}</p>
                 <p className="text-xs mt-2 italic px-4 py-2 rounded-xl"
                   style={{ background: "var(--card)", color: "var(--text)" }}>
-                  {reportData.description || "No description provided"}
+                  "Hamare gaon ka handpump 2 haftton se kharab hai."
                 </p>
                 <button onClick={() => { setListening(false); setMode("text"); setDesc("Hamare gaon ka handpump 2 haftton se kharab hai. Paani aana band ho gaya hai."); }}
                   className="mt-3 text-xs font-semibold underline" style={{ color: "var(--green)" }}>
-                  Use this text
+                  {t("rep.step1.use_text")}
                 </button>
               </>
             )}
           </div>
         )}
 
-{mode === "text" && (
-  <textarea
-    value={desc}
-    onChange={e => {
-      setDesc(e.target.value);
-      setReportData(prev => ({
-        ...prev,
-        description: e.target.value,
-      }));
-    }}
-    rows={4}
-    placeholder="Apni samasya yahan likhein… / Type your problem here…"
-    className="w-full px-4 py-3 rounded-xl border-2 text-sm outline-none resize-none mb-4"
-    style={{
-      borderColor: desc ? "var(--navy)" : "var(--border)",
-      background: "var(--input-bg)",
-      color: "var(--text)",
-    }}
-  />
-)}
+        {mode === "text" && (
+          <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={4}
+            placeholder="Apni samasya yahan likhein… / Type your problem here…"
+            className="w-full px-4 py-3 rounded-xl border-2 text-sm outline-none resize-none mb-4"
+            style={{
+              borderColor: desc ? "var(--navy)" : "var(--border)",
+              background: "var(--input-bg)", color: "var(--text)"
+            }} />
+        )}
 
         <h2 className="font-semibold text-sm mb-3" style={{ color: "var(--text)" }}>{t("rep.step1.photo")}</h2>
-<div className="grid grid-cols-3 gap-2 mb-6">
-
-  <input
-    ref={photoInputRef}
-    type="file"
-    accept="image/*"
-    capture="environment"
-    multiple
-    className="hidden"
-    onChange={e => {
-      const files = Array.from(e.target.files || []);
-      setMediaFiles(prev => [...prev, ...files]);
-    }}
-  />
-
-  <input
-    ref={videoInputRef}
-    type="file"
-    accept="video/*"
-    multiple
-    className="hidden"
-    onChange={e => {
-      const files = Array.from(e.target.files || []);
-      setMediaFiles(prev => [...prev, ...files]);
-    }}
-  />
-
-  <button
-    type="button"
-    onClick={() => photoInputRef.current?.click()}
-    className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
-    style={{
-      borderColor: "var(--border)",
-      background: "var(--card)",
-      color: "var(--text-muted)"
-    }}
-  >
-    <Camera size={22} />
-    <span className="text-xs font-medium">Take Photo</span>
-  </button>
-
-  <button
-    type="button"
-    onClick={() => photoInputRef.current?.click()}
-    className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
-    style={{
-      borderColor: "var(--border)",
-      background: "var(--card)",
-      color: "var(--text-muted)"
-    }}
-  >
-    <Upload size={22} />
-    <span className="text-xs font-medium">Upload Photo</span>
-  </button>
-
-  <button
-    type="button"
-    onClick={() => videoInputRef.current?.click()}
-    className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
-    style={{
-      borderColor: "var(--border)",
-      background: "var(--card)",
-      color: "var(--text-muted)"
-    }}
-  >
-    <Video size={22} />
-    <span className="text-xs font-medium">Upload Video</span>
-  </button>
-
-</div>
+        <div className="grid grid-cols-3 gap-2 mb-6">
+          {[
+            { icon: <Camera size={22} />, label: "Take Photo" },
+            { icon: <Upload size={22} />, label: "Upload Photo" },
+            { icon: <Video size={22} />, label: "Upload Video" },
+          ].map(b => (
+            <button key={b.label} className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
+              style={{ borderColor: "var(--border)", background: "var(--card)", color: "var(--text-muted)" }}>
+              {b.icon}
+              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{b.label}</span>
+            </button>
+          ))}
+        </div>
 
         <Btn onClick={() => onNav("report-step2")} className="w-full py-4 text-base"
           icon={<ArrowRight size={18} />}>
@@ -2871,44 +2019,12 @@ const cats = categories.map(c => ({
 }
 
 // ─── REPORT STEP 2 ────────────────────────────────────────────────────────────
-function ReportStep2Screen({
-  onNav,
-  reportData,
-  setReportData,
-}: {
-  onNav: (s: Screen) => void;
-  reportData: {
-    description: string;
-    category: string;
-    district: string;
-    block: string;
-    panchayatWard: string;
-    landmark: string;
-    siteAddress: string;
-    latitude: string;
-    longitude: string;
-  };
-  setReportData: React.Dispatch<React.SetStateAction<typeof reportData>>;
-}) {
-  const { t } = useApp();
+function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t, role } = useApp();
   const [method, setMethod] = useState<"none" | "gps" | "map" | "manual">("none");
-  useEffect(() => {
-  if (method === "gps") {
-    navigator.geolocation.getCurrentPosition(
-      position => {
-        setReportData(prev => ({
-          ...prev,
-          latitude: String(position.coords.latitude),
-          longitude: String(position.coords.longitude),
-        }));
-      },
-      () => {}
-    );
-  }
-}, [method]);
-  const [dist, setDist] = useState(reportData.district);
-  const [block, setBlock] = useState(reportData.block);
-  const [panch, setPanch] = useState(reportData.panchayatWard);
+  const [dist, setDist] = useState("");
+  const [block, setBlock] = useState("");
+  const [panch, setPanch] = useState("");
 
 
   const StepDots = () => (
@@ -2941,6 +2057,18 @@ function ReportStep2Screen({
       </div>
 
       <div className="px-4 py-5">
+        {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
+        {role === "citizen" && (
+          <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
+            <MitraAssistant
+              size="compact"
+              variant="compact"
+              message={t("mitra.rep.step2")}
+              subMessage={method === "gps" ? t("loc.confirmed") : undefined}
+            />
+          </div>
+        )}
+
         <div className="space-y-3 mb-5">
           {[
             { method: "gps" as const, icon: <Navigation size={24} />, label: t("rep.step2.gps"), color: "var(--green)" },
@@ -2971,7 +2099,7 @@ function ReportStep2Screen({
               <CheckCircle size={18} color="var(--success)" />
               <div>
                 <div className="text-sm font-semibold" style={{ color: "var(--success)" }}>{t("loc.detected")}</div>
-                <div className="text-xs" style={{ color: "var(--text-muted)" }}>GPS: 23.3441° N, 85.3096° E</div>
+                <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Bakri Bazar, Piska Nagri, Kanke</div>
               </div>
             </div>
             <div className="rounded-xl overflow-hidden map-placeholder h-36 flex items-center justify-center mb-3">
@@ -2984,11 +2112,11 @@ function ReportStep2Screen({
                 {t("loc.confirmed")}:
               </p>
               {[
-  ["loc.village", reportData.panchayatWard],
-  ["loc.panchayat", reportData.panchayatWard],
-  ["loc.block", reportData.block],
-  ["loc.district", reportData.district],
-].map(([k, v]) => (
+                ["loc.village", "Bakri Bazar"],
+                ["loc.panchayat", "Piska Nagri"],
+                ["loc.block", "Kanke"],
+                ["loc.district", "Ranchi, Jharkhand"],
+              ].map(([k, v]) => (
                 <div key={k} className="flex justify-between text-sm py-0.5">
                   <span style={{ color: "var(--text-muted)" }}>{t(k)}</span>
                   <span className="font-semibold" style={{ color: "var(--text)" }}>{v}</span>
@@ -3001,7 +2129,7 @@ function ReportStep2Screen({
         {method === "map" && (
           <Card className="p-4 mb-5">
             <p className="text-sm font-semibold mb-2" style={{ color: "var(--text)" }}>
-              <Map size={14} className="inline mr-1" /> Click the map to set problem location
+              <Map size={14} className="inline mr-1" /> {t("rep.step2.map_hint")}
             </p>
             <div className="rounded-xl overflow-hidden map-placeholder h-56 flex items-center justify-center relative">
               <div className="relative z-10 text-center">
@@ -3009,7 +2137,7 @@ function ReportStep2Screen({
                   <MapPin size={22} color="var(--error)" />
                 </div>
                 <div className="mt-2 px-3 py-1 rounded-full text-xs font-semibold bg-white shadow">
-                  Drag to move
+                  {t("rep.step2.drag_hint")}
                 </div>
               </div>
             </div>
@@ -3026,66 +2154,11 @@ function ReportStep2Screen({
             ].map(f => (
               <div key={f.key} className="mb-3">
                 <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>{t(f.key)}</label>
-<select
-  value={
-    f.key === "loc.district"
-      ? dist
-      : f.key === "loc.block"
-      ? block
-      : f.key === "loc.panchayat"
-      ? panch
-      : reportData.siteAddress
-  }
-  onChange={e => {
-    const value = e.target.value;
-
-    if (f.key === "loc.district") {
-      setDist(value);
-      setBlock("");
-      setPanch("");
-      setReportData(prev => ({
-        ...prev,
-        district: value,
-        block: "",
-        panchayatWard: "",
-      }));
-    }
-
-    if (f.key === "loc.block") {
-      setBlock(value);
-      setPanch("");
-      setReportData(prev => ({
-        ...prev,
-        block: value,
-        panchayatWard: "",
-      }));
-    }
-
-if (f.key === "loc.panchayat") {
-  setPanch(value);
-  setReportData(prev => ({
-    ...prev,
-    panchayatWard: value,
-  }));
-}
-
-if (f.key === "loc.village") {
-  setReportData(prev => ({
-    ...prev,
-    siteAddress: value,
-  }));
-}
-  }}
-  className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-  style={{
-    background: "var(--input-bg)",
-    borderColor: "var(--border)",
-    color: "var(--text)"
-  }}
->
-  <option value="">Select…</option>
-  {f.opts.map(o => <option key={o}>{o}</option>)}
-</select>
+                <select className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}>
+                  <option value="">Select…</option>
+                  {f.opts.map(o => <option key={o}>{o}</option>)}
+                </select>
               </div>
             ))}
           </Card>
@@ -3103,63 +2176,8 @@ if (f.key === "loc.village") {
 }
 
 // ─── REPORT STEP 3 ────────────────────────────────────────────────────────────
-function ReportStep3Screen({
-  onNav,
-  reportData,
-  mediaFiles,
-  setProblemCode,
-}: {
-  onNav: (s: Screen) => void;
-  reportData: {
-    description: string;
-    category: string;
-    district: string;
-    block: string;
-    panchayatWard: string;
-    landmark: string;
-    siteAddress: string;
-    latitude: string;
-    longitude: string;
-  };
-  mediaFiles: File[];
-  setProblemCode: React.Dispatch<React.SetStateAction<string>>;
-}) {
-  const { t } = useApp();
-  const [categories, setCategories] = useState<
-  { category_id: number; category_name: string }[]
->([]);
-
-useEffect(() => {
-  apiFetch("/api/categories")
-    .then(data => setCategories(data.categories || []))
-    .catch(err => console.error(err));
-}, []);
-  const handleSubmit = async () => {
-  const formData = new FormData();
-
-  formData.append("title", reportData.description.slice(0, 100));
-  formData.append("description", reportData.description);
-  formData.append("categoryId", reportData.category);
-  formData.append("district", reportData.district);
-  formData.append("block", reportData.block);
-  formData.append("panchayatWard", reportData.panchayatWard);
-  formData.append("siteAddress", reportData.siteAddress);
-  formData.append("landmark", reportData.landmark);
-  formData.append("latitude", reportData.latitude);
-  formData.append("longitude", reportData.longitude);
-
-  mediaFiles.forEach(file => {
-    formData.append("media", file);
-  });
-
-  const data = await apiFetch("/api/problems", {
-    method: "POST",
-    body: formData,
-  });
-
-  setProblemCode(data.problem.problem_code);
-  onNav("ai-processing");
-};
+function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t, role } = useApp();
   const StepDots = () => (
     <div className="flex items-center gap-1">
       {[1, 2, 3].map(s => (
@@ -3189,39 +2207,47 @@ useEffect(() => {
       </div>
 
       <div className="px-4 py-5">
+        {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
+        {role === "citizen" && (
+          <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
+            <MitraAssistant
+              size="compact"
+              variant="compact"
+              message={t("mitra.rep.step3")}
+              subMessage="कृपया अपनी समस्या का विवरण जांचें और जमा करें"
+            />
+          </div>
+        )}
+
         <Card className="p-4 mb-4">
           <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: "var(--text)" }}>
-            <ClipboardList size={16} /> Your Report Summary
+            <ClipboardList size={16} /> {t("rep.step3.summary")}
           </h3>
           <div className="space-y-3">
             <div className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
               <p className="text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                <MessageSquare size={11} /> Problem Description
+                <MessageSquare size={11} /> {t("rep.step3.desc_label")}
               </p>
               <p className="text-sm" style={{ color: "var(--text)" }}>
-                {reportData.description || "No description provided"}
+                "Hamare gaon ka handpump 2 haftton se kharab hai."
               </p>
             </div>
             <div className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
               <p className="text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                <MapPin size={11} /> Location
+                <MapPin size={11} /> {t("rep.step3.loc_label")}
               </p>
               <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                {[reportData.siteAddress, reportData.block, reportData.district]
-  .filter(Boolean)
-  .join(", ") || "Location not provided"}
+                Bakri Bazar, Kanke Block, Ranchi
               </p>
             </div>
             <div className="flex gap-3">
               <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--success-bg)" }}>
                 <Droplets size={16} color="var(--green)" className="mx-auto mb-1" />
-                <p className="text-xs font-bold" style={{ color: "var(--green)" }}>
-  {categories.find(c => String(c.category_id) === reportData.category)?.category_name || "Category"}
-</p>
+                <p className="text-xs font-bold" style={{ color: "var(--green)" }}>Water</p>
               </div>
               <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--warning-bg)" }}>
                 <Camera size={16} color="var(--warning)" className="mx-auto mb-1" />
-                <p className="text-xs font-bold" style={{ color: "var(--warning)" }}>{mediaFiles.length} {mediaFiles.length === 1 ? "Photo/Video" : "Photos/Videos"}</p>
+                <p className="text-xs font-bold" style={{ color: "var(--warning)" }}>1 Photo</p>
               </div>
             </div>
           </div>
@@ -3229,7 +2255,7 @@ useEffect(() => {
 
         <div className="p-4 rounded-xl border mb-5" style={{ background: "#EFF6FF", borderColor: "#BFDBFE" }}>
           <p className="text-xs font-semibold mb-2 flex items-center gap-1" style={{ color: "#1D4ED8" }}>
-            <Activity size={13} /> AI will automatically handle:
+            <Activity size={13} /> {t("rep.step3.ai_handle")}
           </p>
           {["Categorize and prioritize your problem", "Detect similar reports nearby", "Match with the best university", "Generate a unique Challenge ID"].map(item => (
             <p key={item} className="text-xs flex items-center gap-1.5 mb-1" style={{ color: "#1E40AF" }}>
@@ -3238,7 +2264,7 @@ useEffect(() => {
           ))}
         </div>
 
-        <Btn onClick={handleSubmit} className="w-full py-4 text-base mb-3"
+        <Btn onClick={() => onNav("ai-processing")} className="w-full py-4 text-base mb-3"
           icon={<SendHorizontal size={18} />}>
           {t("rep.submit")}
         </Btn>
@@ -3254,13 +2280,6 @@ useEffect(() => {
 // ─── AI PROCESSING ────────────────────────────────────────────────────────────
 function AIProcessingScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
-  const [categories, setCategories] = useState<{ category_id: number; category_name: string }[]>([]);
-
-useEffect(() => {
-  apiFetch("/api/categories")
-    .then(data => setCategories(data.categories || []))
-    .catch(err => console.error(err));
-}, []); 
   const [step, setStep] = useState(0);
   const steps = [
     t("ai.processing"),
@@ -3392,29 +2411,40 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
   );
 }
 
-// ─── onSubmit SUCCESS ────────────────────────────────────────────────────────────
-function SubmitSuccessScreen({ onNav, problemCode }: { onNav: (s: Screen) => void; problemCode?: string }) {
+// ─── SUBMIT SUCCESS ────────────────────────────────────────────────────────────
+function SubmitSuccessScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center"
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 text-center"
       style={{ background: "var(--bg)" }}>
-      <div className="w-24 h-24 rounded-full flex items-center justify-center mb-5"
-        style={{ background: "var(--success-bg)" }}>
-        <CheckCircle size={48} color="var(--success)" />
-      </div>
-      <h1 className="text-2xl font-black mb-2" style={{ color: "var(--success)" }}>{t("success.title")}</h1>
-      <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
-        Your problem has been recorded and is being reviewed.
-      </p>
+      {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
+      {role === "citizen" ? (
+        <div className="mb-6 w-full max-w-md p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
+          <MitraAssistant
+            size="compact"
+            variant="compact"
+            message={t("mitra.rep.success")}
+            subMessage={t("success.title")}
+          />
+        </div>
+      ) : (
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3"
+            style={{ background: "var(--success-bg)" }}>
+            <CheckCircle size={32} color="var(--green)" />
+          </div>
+          <h2 className="text-xl font-bold" style={{ color: "var(--text)" }}>{t("success.title")}</h2>
+        </div>
+      )}
       <Card className="p-5 mb-6 w-full max-w-xs">
         <p className="text-xs font-medium mb-2 flex items-center justify-center gap-1"
           style={{ color: "var(--text-muted)" }}>
           <ClipboardList size={12} /> Challenge ID
         </p>
         <div className="text-3xl font-black font-mono tracking-wide mb-2" style={{ color: "var(--navy)" }}>
-          {problemCode || "—"}
+          JH-WTR-1024
         </div>
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>Save this to track your problem</p>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>{t("success.save_hint")}</p>
       </Card>
       <div className="flex gap-3 w-full max-w-xs">
         <Btn onClick={() => onNav("tracking")} className="flex-1" icon={<MapPin size={16} />}>
@@ -3453,6 +2483,19 @@ function TrackingScreen({ onNav }: { onNav: (s: Screen) => void }) {
         <div className="mt-2 px-3 py-1 rounded-lg inline-block" style={{ background: "rgba(255,255,255,0.1)" }}>
           <span className="text-xs font-mono text-white">JH-WTR-1024</span>
         </div>
+
+        {/* Mitra Tracking Guidance - ONLY for Individual Citizen */}
+        {role === "citizen" && (
+          <div className="mt-3 p-3 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/15">
+            <MitraAssistant
+              size="compact"
+              variant="compact"
+              message={t("mitra.rep.track")}
+              badgeText="Mitra • Live Status"
+              
+            />
+          </div>
+        )}
       </div>
       <div className="px-4 py-5">
         <Card className="p-4 mb-5">
@@ -4538,6 +3581,688 @@ function ImpactDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 }
 
 // ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+// ─── PROFILE SCREEN (Shifted from Profile Setup to Dashboard Bottom Right) ────
+function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: string }) {
+  const { t, lang } = useApp();
+  const [isEditing, setIsEditing] = useState(false);
+  const [showSavedToast, setShowSavedToast] = useState(false);
+
+  // Role-specific initial state
+  const [citizenData, setCitizenData] = useState({
+    name: "Ram Kumar",
+    gender: "Male",
+    dob: "1988-05-14",
+    phone: "+91 98765 43210",
+    houseNumber: "42",
+    landmark: "Bakri Bazar, Near Hanuman Mandir",
+    city: "Kanke, Ranchi",
+    pincode: "834006",
+    district: "Ranchi",
+    state: "Jharkhand",
+  });
+
+  const [panchayatData, setPanchayatData] = useState({
+    panchayatName: "Kanke Gram Panchayat",
+    mukhiyaName: "Suresh Mahto",
+    officeAddress: "Panchayat Bhawan, Kanke Main Road",
+    phone: "+91 94311 02244",
+    district: "Ranchi",
+    block: "Kanke",
+    villages: "Kanke, Bakri Bazar, Sukurhutu",
+  });
+
+  const [localOrgData, setLocalOrgData] = useState({
+    orgName: "Kanke Jan Sewa Samiti",
+    spocName: "Ramesh Sharma",
+    designation: "General Secretary",
+    officeAddress: "Community Center, Sector 2, Kanke",
+    district: "Ranchi",
+    block: "Kanke",
+    area: "Ward 4, Kanke",
+    phone: "+91 98765 43210",
+  });
+
+  const [uniData, setUniData] = useState({
+    uniName: "BIT Mesra",
+    spocName: "Dr. Alok Verma",
+    address: "BIT Mesra Campus, Ranchi, Jharkhand 835215",
+    expertise: "Civil Engineering, Water Management, IoT, Rural Tech",
+    phone: "+91 98765 43210",
+  });
+
+  const [industryData, setIndustryData] = useState({
+    industryName: "TechGrow Solutions Pvt. Ltd.",
+    spocName: "Priya Sundaram",
+    category: "IoT, AgriTech, CleanTech",
+    address: "Industrial Area, Namkum, Ranchi",
+    expertise: "IoT Sensors, Water Technology, Solar Automation",
+    email: "contact@techgrow.com",
+  });
+
+  const [orgSolverData, setOrgSolverData] = useState({
+    orgName: "Jharkhand Vikas Sansthan",
+    spocName: "Amit Roy",
+    focus: "Drinking Water, Solar Lighting, Waste Management",
+    address: "Harmu Housing Colony, Ranchi",
+    phone: "+91 98765 43210",
+  });
+
+  const handleSave = () => {
+    setIsEditing(false);
+    setShowSavedToast(true);
+    setTimeout(() => setShowSavedToast(false), 3500);
+  };
+
+  const getRoleHeader = () => {
+    if (role === "panchayat") {
+      return {
+        title: panchayatData.panchayatName,
+        sub: "Panchayati Raj Institution • Local Body",
+        icon: <Building2 size={24} color="var(--green)" />,
+        tag: "Verified Local Governance",
+      };
+    }
+    if (role === "localorg" || role === "org-victim") {
+      return {
+        title: localOrgData.orgName,
+        sub: "Local Organisation (RWA) • Community Body",
+        icon: <Users size={24} color="var(--green)" />,
+        tag: "Verified Resident Welfare Association",
+      };
+    }
+    if (role === "university") {
+      return {
+        title: uniData.uniName,
+        sub: "Higher Education & Research Institution",
+        icon: <GraduationCap size={24} color="var(--amber)" />,
+        tag: "Academic Partner",
+      };
+    }
+    if (role === "industry") {
+      return {
+        title: industryData.industryName,
+        sub: "Industry & Corporate Innovation Partner",
+        icon: <Briefcase size={24} color="var(--amber)" />,
+        tag: "Industry Solver",
+      };
+    }
+    if (role === "org-solver" || role === "org") {
+      return {
+        title: orgSolverData.orgName,
+        sub: "Civil Society & Non-Profit Organisation",
+        icon: <Building size={24} color="var(--amber)" />,
+        tag: "Solution Provider",
+      };
+    }
+    return {
+      title: citizenData.name,
+      sub: citizenData.phone + " • " + citizenData.city,
+      icon: <User size={24} color="var(--green)" />,
+      tag: "Verified Citizen (JH-CIT-8821)",
+    };
+  };
+
+  const headerInfo = getRoleHeader();
+
+  return (
+    <div className="min-h-screen pb-20" style={{ background: "var(--bg)" }}>
+      <NavBar role={role} screen="profile" onNav={onNav} />
+
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        {/* Back navigation */}
+        <button onClick={() => onNav(getHomeDashboard(role))}
+          className="text-xs flex items-center gap-1 mb-4 transition-all cursor-pointer"
+          style={{ color: "var(--text-muted)" }}>
+          <ArrowLeft size={13} /> Back to Dashboard
+        </button>
+
+        {/* Saved feedback banner */}
+        {showSavedToast && (
+          <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-500/30 flex items-center gap-2 text-emerald-800 dark:text-emerald-200 text-xs font-semibold animate-fadeIn">
+            <CheckCircle size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{t("profile.saved")}</span>
+          </div>
+        )}
+
+        {/* Mitra Compact Guidance Banner (Image 2 style) - ONLY FOR INDIVIDUAL CITIZEN */}
+        {role === "citizen" && (
+          <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
+            <MitraAssistant
+              size="compact"
+              variant="compact"
+              message={t("mitra.profile.view")}
+              subMessage="Tap Edit Profile below to update your name, address or contact details."
+            />
+          </div>
+        )}
+
+        {/* Profile Card Header */}
+        <Card className="p-5 mb-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
+                style={{ background: "var(--success-bg)", border: "1.5px solid var(--border)" }}>
+                {headerInfo.icon}
+              </div>
+              <div>
+                <h1 className="text-lg font-black" style={{ color: "var(--text)" }}>{headerInfo.title}</h1>
+                <p className="text-xs font-medium mt-0.5" style={{ color: "var(--text-muted)" }}>{headerInfo.sub}</p>
+                <div className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#207244]/10 text-[#207244] dark:text-[#4ade80]">
+                  <UserCheck size={12} /> {headerInfo.tag}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                if (isEditing) handleSave();
+                else setIsEditing(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+              style={{
+                background: isEditing ? "var(--green)" : "var(--card)",
+                color: isEditing ? "white" : "var(--text)",
+                border: "1.5px solid var(--border)",
+              }}
+            >
+              {isEditing ? (
+                <><CheckCircle size={14} /> {t("profile.save")}</>
+              ) : (
+                <><Edit2 size={13} /> {t("profile.edit")}</>
+              )}
+            </button>
+          </div>
+        </Card>
+
+        {/* Profile Details Form Content */}
+        <Card className="p-5 shadow-sm mb-6">
+          <div className="flex items-center justify-between mb-4 pb-2 border-b" style={{ borderColor: "var(--border)" }}>
+            <h2 className="text-sm font-black flex items-center gap-1.5" style={{ color: "var(--text)" }}>
+              <UserCheck size={16} color="var(--green)" /> {t("profile.info")}
+            </h2>
+            <span className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
+              {isEditing ? "Editing Mode" : "View Mode"}
+            </span>
+          </div>
+
+          {/* CITIZEN PROFILE FIELDS */}
+          {role === "citizen" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("profile.name")}</label>
+                  <input
+                    disabled={!isEditing}
+                    value={citizenData.name}
+                    onChange={e => setCitizenData({ ...citizenData, name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none transition-all disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("auth.mobile")}</label>
+                  <input
+                    disabled={!isEditing}
+                    value={citizenData.phone}
+                    onChange={e => setCitizenData({ ...citizenData, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none transition-all disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("profile.gender")}</label>
+                  <select
+                    disabled={!isEditing}
+                    value={citizenData.gender}
+                    onChange={e => setCitizenData({ ...citizenData, gender: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none transition-all disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}>
+                    <option>Male</option>
+                    <option>Female</option>
+                    <option>Other</option>
+                    <option>Prefer not to say</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("profile.dob")}</label>
+                  <input
+                    type="date"
+                    disabled={!isEditing}
+                    value={citizenData.dob}
+                    onChange={e => setCitizenData({ ...citizenData, dob: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none transition-all disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <p className="text-xs font-bold mb-2 flex items-center gap-1" style={{ color: "var(--text)" }}>
+                  <MapPin size={13} color="var(--green)" /> {t("profile.address")}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2 border-l-2" style={{ borderColor: "var(--border)" }}>
+                  <div>
+                    <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>{t("profile.housenumber")}</label>
+                    <input
+                      disabled={!isEditing}
+                      value={citizenData.houseNumber}
+                      onChange={e => setCitizenData({ ...citizenData, houseNumber: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border text-xs outline-none disabled:opacity-75"
+                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>{t("profile.landmark")}</label>
+                    <input
+                      disabled={!isEditing}
+                      value={citizenData.landmark}
+                      onChange={e => setCitizenData({ ...citizenData, landmark: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border text-xs outline-none disabled:opacity-75"
+                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>{t("profile.city")}</label>
+                    <input
+                      disabled={!isEditing}
+                      value={citizenData.city}
+                      onChange={e => setCitizenData({ ...citizenData, city: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border text-xs outline-none disabled:opacity-75"
+                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>{t("profile.pincode")}</label>
+                    <input
+                      disabled={!isEditing}
+                      value={citizenData.pincode}
+                      onChange={e => setCitizenData({ ...citizenData, pincode: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border text-xs outline-none disabled:opacity-75"
+                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PANCHAYAT PROFILE FIELDS */}
+          {role === "panchayat" && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Panchayat Name</label>
+                <input
+                  disabled={!isEditing}
+                  value={panchayatData.panchayatName}
+                  onChange={e => setPanchayatData({ ...panchayatData, panchayatName: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Mukhiya / Sarpanch Name</label>
+                  <input
+                    disabled={!isEditing}
+                    value={panchayatData.mukhiyaName}
+                    onChange={e => setPanchayatData({ ...panchayatData, mukhiyaName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Official Phone Number</label>
+                  <input
+                    disabled={!isEditing}
+                    value={panchayatData.phone}
+                    onChange={e => setPanchayatData({ ...panchayatData, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Office Address</label>
+                <input
+                  disabled={!isEditing}
+                  value={panchayatData.officeAddress}
+                  onChange={e => setPanchayatData({ ...panchayatData, officeAddress: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>District</label>
+                  <input
+                    disabled={!isEditing}
+                    value={panchayatData.district}
+                    onChange={e => setPanchayatData({ ...panchayatData, district: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Block</label>
+                  <input
+                    disabled={!isEditing}
+                    value={panchayatData.block}
+                    onChange={e => setPanchayatData({ ...panchayatData, block: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Village(s)</label>
+                  <input
+                    disabled={!isEditing}
+                    value={panchayatData.villages}
+                    onChange={e => setPanchayatData({ ...panchayatData, villages: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* LOCAL ORGANISATION (RWA) PROFILE FIELDS */}
+          {(role === "localorg" || role === "org-victim") && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Organisation Name</label>
+                <input
+                  disabled={!isEditing}
+                  value={localOrgData.orgName}
+                  onChange={e => setLocalOrgData({ ...localOrgData, orgName: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>SPOC Name</label>
+                  <input
+                    disabled={!isEditing}
+                    value={localOrgData.spocName}
+                    onChange={e => setLocalOrgData({ ...localOrgData, spocName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Designation</label>
+                  <input
+                    disabled={!isEditing}
+                    value={localOrgData.designation}
+                    onChange={e => setLocalOrgData({ ...localOrgData, designation: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Office Address</label>
+                <input
+                  disabled={!isEditing}
+                  value={localOrgData.officeAddress}
+                  onChange={e => setLocalOrgData({ ...localOrgData, officeAddress: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>District</label>
+                  <input
+                    disabled={!isEditing}
+                    value={localOrgData.district}
+                    onChange={e => setLocalOrgData({ ...localOrgData, district: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Block</label>
+                  <input
+                    disabled={!isEditing}
+                    value={localOrgData.block}
+                    onChange={e => setLocalOrgData({ ...localOrgData, block: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Panchayat / Area</label>
+                  <input
+                    disabled={!isEditing}
+                    value={localOrgData.area}
+                    onChange={e => setLocalOrgData({ ...localOrgData, area: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* UNIVERSITY PROFILE FIELDS */}
+          {role === "university" && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>University / Institute Name</label>
+                <input
+                  disabled={!isEditing}
+                  value={uniData.uniName}
+                  onChange={e => setUniData({ ...uniData, uniName: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>SPOC Name</label>
+                  <input
+                    disabled={!isEditing}
+                    value={uniData.spocName}
+                    onChange={e => setUniData({ ...uniData, spocName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Contact Number</label>
+                  <input
+                    disabled={!isEditing}
+                    value={uniData.phone}
+                    onChange={e => setUniData({ ...uniData, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Campus Address</label>
+                <input
+                  disabled={!isEditing}
+                  value={uniData.address}
+                  onChange={e => setUniData({ ...uniData, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Core Expertise Areas</label>
+                <input
+                  disabled={!isEditing}
+                  value={uniData.expertise}
+                  onChange={e => setUniData({ ...uniData, expertise: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* INDUSTRY PROFILE FIELDS */}
+          {role === "industry" && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Industry / Company Name</label>
+                <input
+                  disabled={!isEditing}
+                  value={industryData.industryName}
+                  onChange={e => setIndustryData({ ...industryData, industryName: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>SPOC Name</label>
+                  <input
+                    disabled={!isEditing}
+                    value={industryData.spocName}
+                    onChange={e => setIndustryData({ ...industryData, spocName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Category</label>
+                  <input
+                    disabled={!isEditing}
+                    value={industryData.category}
+                    onChange={e => setIndustryData({ ...industryData, category: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Company Address</label>
+                <input
+                  disabled={!isEditing}
+                  value={industryData.address}
+                  onChange={e => setIndustryData({ ...industryData, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Expertise Areas</label>
+                  <input
+                    disabled={!isEditing}
+                    value={industryData.expertise}
+                    onChange={e => setIndustryData({ ...industryData, expertise: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Official Email</label>
+                  <input
+                    disabled={!isEditing}
+                    value={industryData.email}
+                    onChange={e => setIndustryData({ ...industryData, email: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ORG SOLVER PROFILE FIELDS */}
+          {(role === "org-solver" || role === "org") && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Organisation Name</label>
+                <input
+                  disabled={!isEditing}
+                  value={orgSolverData.orgName}
+                  onChange={e => setOrgSolverData({ ...orgSolverData, orgName: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>SPOC / Leader Name</label>
+                  <input
+                    disabled={!isEditing}
+                    value={orgSolverData.spocName}
+                    onChange={e => setOrgSolverData({ ...orgSolverData, spocName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Contact Phone</label>
+                  <input
+                    disabled={!isEditing}
+                    value={orgSolverData.phone}
+                    onChange={e => setOrgSolverData({ ...orgSolverData, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Focus Areas</label>
+                <input
+                  disabled={!isEditing}
+                  value={orgSolverData.focus}
+                  onChange={e => setOrgSolverData({ ...orgSolverData, focus: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Address</label>
+                <input
+                  disabled={!isEditing}
+                  value={orgSolverData.address}
+                  onChange={e => setOrgSolverData({ ...orgSolverData, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                />
+              </div>
+            </div>
+          )}
+
+          {isEditing && (
+            <div className="mt-5 pt-3 border-t flex gap-2" style={{ borderColor: "var(--border)" }}>
+              <Btn onClick={handleSave} className="flex-1" icon={<CheckCircle size={16} />}>
+                {t("profile.save")}
+              </Btn>
+              <Btn variant="secondary" onClick={() => setIsEditing(false)} className="px-4">
+                Cancel
+              </Btn>
+            </div>
+          )}
+        </Card>
+
+        {/* Quick Actions */}
+        <div className="flex gap-3">
+          <button onClick={() => onNav("landing")}
+            className="flex-1 p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+            style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--error)" }}>
+            <LogOut size={14} /> {t("nav.logout")}
+          </button>
+        </div>
+      </div>
+
+      <MobileNav onNav={onNav} activeScreen="profile" />
+    </div>
+  );
+}
+
 function NotificationsScreen({ onNav, role }: { onNav: (s: Screen) => void; role: string }) {
   const { t } = useApp();
   const allNotifs = {
@@ -4721,21 +4446,10 @@ export default function App() {
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("jsic_lang") as Lang) || "en");
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
   const [screen, setScreen] = useState<Screen>("landing");
-  const [problemCode, setProblemCode] = useState("");
-  const [reportData, setReportData] = useState({
-  description: "",
-  category: "",
-  district: "",
-  block: "",
-  panchayatWard: "",
-  landmark: "",
-  siteAddress: "",
-  latitude: "",
-  longitude: "",
-});
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [role, setRole] = useState("citizen");
-  const [showLangModal, setShowLangModal] = useState(() => !localStorage.getItem("jsic_lang"));
+  // On initial website load, show language selection popup, followed immediately by Mitra full-body welcome
+  const [showLangModal, setShowLangModal] = useState(true);
+  const [showMitraWelcome, setShowMitraWelcome] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -4767,15 +4481,7 @@ export default function App() {
     }, 450);
   };
 
-const props = { onNav: navigate, problemCode, setProblemCode };
-const reportProps = {
-  ...props,
-  reportData,
-  setReportData,
-  mediaFiles,
-  setMediaFiles,
-  setProblemCode,
-};
+  const props = { onNav: navigate };
 
   return (
     <Ctx.Provider value={{ lang, setLang: setLangAndSave, dark, setDark: setDarkAndSave, t, role, setRole }}>
@@ -4785,7 +4491,16 @@ const reportProps = {
 
         {/* Language modal — blocks entry on first visit */}
         {showLangModal && (
-          <LanguageModal onDone={(l) => { setLangAndSave(l); setShowLangModal(false); }} />
+          <LanguageModal onDone={(l) => {
+            setLangAndSave(l);
+            setShowLangModal(false);
+            setShowMitraWelcome(true);
+          }} />
+        )}
+
+        {/* Mitra Welcome Intro — shown immediately after language selection */}
+        {showMitraWelcome && (
+          <MitraWelcomeModal onContinue={() => setShowMitraWelcome(false)} />
         )}
 
         {screen === "landing" && <LandingScreen {...props} />}
@@ -4801,9 +4516,9 @@ const reportProps = {
         {screen === "uni-login" && <UniLoginScreen {...props} />}
         {screen === "industry-login" && <IndustryLoginScreen {...props} />}
         {screen === "citizen-dashboard" && <CitizenDashboardScreen {...props} />}
-        {screen === "report-step1" && <ReportStep1Screen {...reportProps} />}
-        {screen === "report-step2" && <ReportStep2Screen {...reportProps} />}
-        {screen === "report-step3" && <ReportStep3Screen {...reportProps} />}
+        {screen === "report-step1" && <ReportStep1Screen {...props} />}
+        {screen === "report-step2" && <ReportStep2Screen {...props} />}
+        {screen === "report-step3" && <ReportStep3Screen {...props} />}
         {screen === "ai-processing" && <AIProcessingScreen {...props} />}
         {screen === "ai-result" && <AIResultScreen {...props} />}
         {screen === "submit-success" && <SubmitSuccessScreen {...props} />}
@@ -4824,6 +4539,7 @@ const reportProps = {
         {screen === "solution-detail" && <SolutionDetailScreen {...props} />}
         {screen === "impact-dashboard" && <ImpactDashboardScreen {...props} />}
         {screen === "notifications" && <NotificationsScreen {...props} role={role} />}
+        {screen === "profile" && <ProfileScreen {...props} role={role} />}
         {screen === "feedback" && <FeedbackScreen {...props} />}
       </div>
     </Ctx.Provider>
