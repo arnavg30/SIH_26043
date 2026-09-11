@@ -47,6 +47,22 @@ export async function getProfileMe() {
   return apiFetch("/api/profile/me");
 }
 
+export type GeocodedLocation = {
+  latitude: number;
+  longitude: number;
+  displayName: string;
+  address: {
+    district?: string;
+    block?: string;
+    village?: string;
+    pincode?: string;
+  };
+};
+
+export async function geocodeProblemAddress(query: string): Promise<GeocodedLocation> {
+  return apiFetch(`/api/geocode?query=${encodeURIComponent(query.trim())}`);
+}
+
 export async function submitProblem(data: FormData) {
   return apiFetch("/api/problems", { method: "POST", body: data });
 }

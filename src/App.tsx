@@ -21,7 +21,8 @@ import { auth } from "./firebase/config";
 import {
   syncAuth, getProfileMe,
   saveCitizenProfile, savePanchayatProfile, saveLocalOrgProfile,
-  saveOrgProfile, saveIndustryProfile, saveUniProfile, submitProblem
+  saveOrgProfile, saveIndustryProfile, saveUniProfile, submitProblem,
+  geocodeProblemAddress,
 } from "./api";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -3038,18 +3039,26 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
   };
 
   const geocodeAddress = async (query: string, methodLabel: string) => {
+    const cleanedQuery = query.trim();
+    if (!cleanedQuery) {
+      setLocationError("Please enter an address to search.");
+      return false;
+    }
+
     setIsLocating(true);
     setLocationError(null);
+    setReport(current => ({ ...current, latitude: "", longitude: "" }));
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
-      const data = await response.json();
-      if (data && data.length > 0) {
-        saveCoordinates(parseFloat(data[0].lat), parseFloat(data[0].lon), methodLabel, { village: query });
-      } else {
-        setLocationError("Address not found. Please try again or choose on map.");
-      }
-    } catch (e) {
-      setLocationError("Failed to fetch location. Please try again.");
+      const location = await geocodeProblemAddress(cleanedQuery);
+      saveCoordinates(location.latitude, location.longitude, methodLabel, {
+        district: location.address.district || "",
+        block: location.address.block || "",
+        village: location.address.village || location.displayName || cleanedQuery,
+      });
+      return true;
+    } catch (error) {
+      setLocationError(error instanceof Error ? error.message : "Failed to fetch location. Please try again.");
+      return false;
     } finally {
       setIsLocating(false);
     }
@@ -3071,8 +3080,10 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
         
         if (queryParts.length > 0) {
           const query = queryParts.slice(0, 4).join(", ");
-          await geocodeAddress(query, "Profile");
-          setReport(current => ({ ...current, district: p.district || current.district, block: p.block || current.block, village: query }));
+          const found = await geocodeAddress(query, "Profile");
+          if (found) {
+            setReport(current => ({ ...current, district: p.district || current.district, block: p.block || current.block, village: current.village || query }));
+          }
         } else {
           setLocationError("No saved address found in your profile.");
           setIsLocating(false);
@@ -3192,7 +3203,15 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
               setMethod(opt.method);
               if (opt.method === "gps") useCurrentLocation();
               else if (opt.method === "profile") useProfileLocation();
-              else { setLocationError(null); setReport(current => ({ ...current, locationMethod: opt.method === "map" ? "Map" : "Address" })); }
+              else {
+                setLocationError(null);
+                setReport(current => ({
+                  ...current,
+                  latitude: opt.method === "address" ? "" : current.latitude,
+                  longitude: opt.method === "address" ? "" : current.longitude,
+                  locationMethod: opt.method === "map" ? "Map" : "Address",
+                }));
+              }
             }}
               className="w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all active:scale-95"
               style={{
@@ -3233,13 +3252,25 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
                     type="text" 
                     placeholder="e.g. MG Road, Ranchi"
                     value={addressInput}
-                    onChange={e => setAddressInput(e.target.value)}
+                    onChange={e => {
+                      setAddressInput(e.target.value);
+                      setLocationError(null);
+                      if (report.locationMethod === "Address" && report.latitude) {
+                        setReport(current => ({ ...current, latitude: "", longitude: "" }));
+                      }
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && addressInput.trim() && !isLocating) {
+                        e.preventDefault();
+                        void geocodeAddress(addressInput, "Address");
+                      }
+                    }}
                     className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none"
                     style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
                   />
                   <Btn 
-                    onClick={() => geocodeAddress(addressInput, "Address")} 
-                    disabled={!addressInput || isLocating}
+                    onClick={() => void geocodeAddress(addressInput, "Address")}
+                    disabled={!addressInput.trim() || isLocating}
                     className="px-4"
                   >
                     {isLocating ? <RefreshCw size={16} className="animate-spin" /> : "Search"}

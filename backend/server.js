@@ -600,6 +600,95 @@ app.get("/api/categories", async (req, res) => {
   }
 });
 
+// Geocode on the server instead of calling Nominatim from the preview iframe.
+// Besides avoiding browser CORS restrictions, this lets us turn sentence-style
+// input ("X is located at Y") into the concise place queries geocoders expect.
+function geocodeQueries(value) {
+  const query = clean(value)?.replace(/\s+/g, " ").replace(/[.!?]+$/, "");
+  if (!query) return [];
+
+  const candidates = [];
+  const locationSentence = query.match(/^(.+?)\s+(?:is\s+)?(?:located|situated)\s+(?:at|in|near)\s+(.+)$/i);
+  if (locationSentence) {
+    candidates.push(`${locationSentence[1]}, ${locationSentence[2]}`);
+    const localityParts = locationSentence[2]
+      .split(",")
+      .map(part => part.trim())
+      .filter(part => part && !/^\d{6}$/.test(part));
+    if (localityParts.length > 1) {
+      candidates.push(`${locationSentence[1]}, ${localityParts.slice(-2).join(", ")}, India`);
+    }
+    candidates.push(`${locationSentence[2]}, India`);
+    candidates.push(locationSentence[2]);
+  } else {
+    candidates.push(query);
+    if (!/\bindia\b/i.test(query)) candidates.push(`${query}, India`);
+  }
+
+  return [...new Set(candidates)];
+}
+
+app.get("/api/geocode", verifyToken, async (req, res) => {
+  const queries = geocodeQueries(req.query.query);
+  if (!queries.length) {
+    return res.status(400).json({ message: "Please enter an address to search." });
+  }
+  if (queries[0].length > 300) {
+    return res.status(400).json({ message: "Address is too long. Please enter a shorter address." });
+  }
+
+  try {
+    for (const [index, query] of queries.entries()) {
+      // Nominatim's public service allows at most one request per second.
+      if (index > 0) await new Promise(resolve => setTimeout(resolve, 1000));
+      const params = new URLSearchParams({
+        format: "jsonv2",
+        q: query,
+        limit: "1",
+        countrycodes: "in",
+        addressdetails: "1",
+        "accept-language": "en",
+      });
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "NavJhar-SIH-26043/1.0 (address geocoding)",
+        },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) {
+        throw new Error(`Geocoding provider returned ${response.status}`);
+      }
+
+      const results = await response.json();
+      const match = results[0];
+      if (!match) continue;
+
+      const latitude = Number(match.lat);
+      const longitude = Number(match.lon);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+
+      const address = match.address || {};
+      return res.json({
+        latitude,
+        longitude,
+        displayName: match.display_name || query,
+        address: {
+          district: address.state_district || address.county || address.district,
+          block: address.suburb || address.city_district || address.subdistrict,
+          village: address.village || address.town || address.city || address.municipality,
+          pincode: address.postcode,
+        },
+      });
+    }
+
+    return res.status(404).json({ message: "Address not found. Try a shorter address or choose it on the map." });
+  } catch (err) {
+    console.error("GET /api/geocode:", err.message);
+    return res.status(502).json({ message: "Location service is temporarily unavailable. Please try again or choose on the map." });
+  }
+});
+
 // ---------------- Problems ----------------
 const multer = require("multer");
 const upload = multer({
