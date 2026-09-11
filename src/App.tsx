@@ -1602,6 +1602,9 @@ function OrgVictimLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
   const profile = useProfileDisplay("citizen");
+  const mitraGreeting = profile.name
+    ? t("mitra.dash.greeting").replace("{name}", profile.name)
+    : t("mitra.dash.greeting.generic");
   const statuses = [
     { icon: <SendHorizontal size={20} />, val: "3", key: "cit.submitted", color: "#1D4ED8" },
     { icon: <Clock size={20} />, val: "2", key: "cit.underreview", color: "var(--warning)" },
@@ -1634,7 +1637,7 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
           <MitraAssistant
             size="compact"
             variant="compact"
-            message={t("mitra.dash.greeting")}
+            message={mitraGreeting}
             subMessage={t("mitra.dash.hint")}
             badgeText="Mitra • आपकी डिजिटल सहायक"
             
@@ -2975,6 +2978,18 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const [method, setMethod] = useState<"none" | "gps" | "map" | "manual">("none");
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
+  const locationWatchRef = useRef<number | null>(null);
+  const locationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopLocationWatch = () => {
+    if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current);
+    if (locationTimerRef.current !== null) clearTimeout(locationTimerRef.current);
+    locationWatchRef.current = null;
+    locationTimerRef.current = null;
+  };
+
+  useEffect(() => () => stopLocationWatch(), []);
 
   const saveCoordinates = (latitude: number, longitude: number, locationMethod: "GPS" | "Map") => {
     setLocationError(null);
@@ -2991,29 +3006,46 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
       return;
     }
     setMethod("gps");
+    stopLocationWatch();
     setLocationError(null);
     setIsLocating(true);
-    const locate = (options: PositionOptions, allowFallback: boolean) => {
-      navigator.geolocation.getCurrentPosition(
-        ({ coords }) => { saveCoordinates(coords.latitude, coords.longitude, "GPS"); setIsLocating(false); },
-        (error) => {
-          // Some devices cannot get a high-accuracy GPS lock indoors. Retry once using network location.
-          if (allowFallback && (error.code === 2 || error.code === 3)) {
-            locate({ enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }, false);
-            return;
-          }
-          const message = error.code === 1
-            ? "Location permission was blocked. Allow Location for this site in your browser, then try again."
-            : error.code === 3
-              ? "Location request timed out. Move near a window or select the point on the map."
-              : "Your device could not determine a location. Select the point on the map instead.";
-          setLocationError(message);
+    setLocationAccuracy(null);
+
+    let bestAccuracy = Number.POSITIVE_INFINITY;
+    locationWatchRef.current = navigator.geolocation.watchPosition(
+      ({ coords }) => {
+        if (coords.accuracy < bestAccuracy) {
+          bestAccuracy = coords.accuracy;
+          saveCoordinates(coords.latitude, coords.longitude, "GPS");
+          setLocationAccuracy(coords.accuracy);
+        }
+        // A reading within 30 metres is sufficiently precise for a problem report.
+        if (coords.accuracy <= 30) {
+          stopLocationWatch();
           setIsLocating(false);
-        },
-        options
-      );
-    };
-    locate({ enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }, true);
+        }
+      },
+      (error) => {
+        if (error.code === 1) {
+          stopLocationWatch();
+          setLocationError("Location permission was blocked. Allow precise location for this site, then try again.");
+          setIsLocating(false);
+        } else if (bestAccuracy === Number.POSITIVE_INFINITY) {
+          setLocationError("Searching for a precise GPS signal… Move near a window, or select the point on the map.");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+    );
+
+    locationTimerRef.current = setTimeout(() => {
+      stopLocationWatch();
+      setIsLocating(false);
+      if (bestAccuracy === Number.POSITIVE_INFINITY) {
+        setLocationError("A precise location could not be detected. Check device location settings or place the pin on the map.");
+      } else if (bestAccuracy > 100) {
+        setLocationError(`Location is approximate (±${Math.round(bestAccuracy)} m). Drag the pin to the exact place.`);
+      }
+    }, 35000);
   };
 
 
@@ -3096,7 +3128,7 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
                 <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Your browser location is used only for this report.</div>
               </div>
             </div>
-            <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "GPS")} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} height="190px" />
+            <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => { stopLocationWatch(); setIsLocating(false); setLocationAccuracy(null); saveCoordinates(lat, lng, "Map"); }} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} accuracy={locationAccuracy} className="w-full max-w-2xl aspect-square mx-auto" />
           </Card>
         )}
 
@@ -3105,7 +3137,7 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
             <p className="text-sm font-semibold mb-2" style={{ color: "var(--text)" }}>
               <Map size={14} className="inline mr-1" /> {t("rep.step2.map_hint")}
             </p>
-            <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Map")} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} height="224px" />
+            <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => { stopLocationWatch(); setIsLocating(false); setLocationAccuracy(null); saveCoordinates(lat, lng, "Map"); }} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} accuracy={locationAccuracy} className="w-full max-w-2xl aspect-square mx-auto" />
           </Card>
         )}
 
@@ -4591,62 +4623,31 @@ function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: stri
 
   // Role-specific initial state
   const [citizenData, setCitizenData] = useState({
-    name: "Ram Kumar",
-    gender: "Male",
-    dob: "1988-05-14",
-    phone: "+91 98765 43210",
-    houseNumber: "42",
-    landmark: "Bakri Bazar, Near Hanuman Mandir",
-    city: "Kanke, Ranchi",
-    pincode: "834006",
-    district: "Ranchi",
-    state: "Jharkhand",
+    name: "", gender: "", dob: "", phone: "", houseNumber: "",
+    landmark: "", city: "", pincode: "", district: "", state: "",
   });
 
   const [panchayatData, setPanchayatData] = useState({
-    panchayatName: "Kanke Gram Panchayat",
-    mukhiyaName: "Suresh Mahto",
-    officeAddress: "Panchayat Bhawan, Kanke Main Road",
-    phone: "+91 94311 02244",
-    district: "Ranchi",
-    block: "Kanke",
-    villages: "Kanke, Bakri Bazar, Sukurhutu",
+    panchayatName: "", mukhiyaName: "", officeAddress: "", phone: "",
+    district: "", block: "", villages: "",
   });
 
   const [localOrgData, setLocalOrgData] = useState({
-    orgName: "Kanke Jan Sewa Samiti",
-    spocName: "Ramesh Sharma",
-    designation: "General Secretary",
-    officeAddress: "Community Center, Sector 2, Kanke",
-    district: "Ranchi",
-    block: "Kanke",
-    area: "Ward 4, Kanke",
-    phone: "+91 98765 43210",
+    orgName: "", spocName: "", designation: "", officeAddress: "",
+    district: "", block: "", area: "", phone: "",
   });
 
   const [uniData, setUniData] = useState({
-    uniName: "BIT Mesra",
-    spocName: "Dr. Alok Verma",
-    address: "BIT Mesra Campus, Ranchi, Jharkhand 835215",
-    expertise: "Civil Engineering, Water Management, IoT, Rural Tech",
-    phone: "+91 98765 43210",
+    uniName: "", spocName: "", address: "", expertise: "", phone: "",
   });
 
   const [industryData, setIndustryData] = useState({
-    industryName: "TechGrow Solutions Pvt. Ltd.",
-    spocName: "Priya Sundaram",
-    category: "IoT, AgriTech, CleanTech",
-    address: "Industrial Area, Namkum, Ranchi",
-    expertise: "IoT Sensors, Water Technology, Solar Automation",
-    email: "contact@techgrow.com",
+    industryName: "", spocName: "", category: "", address: "",
+    expertise: "", email: "",
   });
 
   const [orgSolverData, setOrgSolverData] = useState({
-    orgName: "Jharkhand Vikas Sansthan",
-    spocName: "Amit Roy",
-    focus: "Drinking Water, Solar Lighting, Waste Management",
-    address: "Harmu Housing Colony, Ranchi",
-    phone: "+91 98765 43210",
+    orgName: "", spocName: "", focus: "", address: "", phone: "",
   });
 
   useEffect(() => {
