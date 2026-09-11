@@ -8,11 +8,12 @@ import {
   Layers, Heart, BookOpen, Lightbulb, Shield, AlertCircle, ChevronDown,
   BarChart3, PieChart, Activity, Leaf, Droplets, Zap, Wheat, Stethoscope,
   School, Trash2, ThumbsUp, SendHorizontal, RefreshCw, Eye, EyeOff, Lock,
-  ClipboardList, HelpCircle, Volume2, UserCheck, Building, Factory, Edit2, Mail,
+  ClipboardList, HelpCircle, Volume2, UserCheck, Building, Factory, Edit2, Mail, Loader2,
 } from "lucide-react";
 import { type Lang, LANG_NAMES, makeT } from "./i18n";
 import { NavJharLogo } from "./components/NavJharLogo";
 import { MitraAssistant } from "./components/MitraAssistant";
+import LocationPickerMap from "./components/LocationPickerMap";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -3009,13 +3010,59 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
 }
 
 // ─── REPORT STEP 2 ────────────────────────────────────────────────────────────
-function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
+type ReportData = {
+  description: string;
+  category: string;
+  district: string;
+  block: string;
+  panchayatWard: string;
+  landmark: string;
+  siteAddress: string;
+  latitude: string;
+  longitude: string;
+};
+
+function ReportStep2Screen({
+  onNav,
+  reportData,
+  setReportData,
+}: {
+  onNav: (s: Screen) => void;
+  reportData: ReportData;
+  setReportData: React.Dispatch<React.SetStateAction<ReportData>>;
+}) {
   const { t, role } = useApp();
   const [method, setMethod] = useState<"none" | "gps" | "map" | "manual">("none");
-  const [dist, setDist] = useState("");
-  const [block, setBlock] = useState("");
-  const [panch, setPanch] = useState("");
+  const [isLocating, setIsLocating] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsDone, setGpsDone] = useState(false);
 
+  const handleGpsLocate = () => {
+    setIsLocating(true);
+    setGpsError(null);
+    setGpsDone(false);
+    if (!navigator.geolocation) {
+      setGpsError("Geolocation is not supported by your browser.");
+      setIsLocating(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setReportData(prev => ({
+          ...prev,
+          latitude: String(pos.coords.latitude.toFixed(6)),
+          longitude: String(pos.coords.longitude.toFixed(6)),
+        }));
+        setIsLocating(false);
+        setGpsDone(true);
+      },
+      (err) => {
+        setGpsError(err.message || "Unable to retrieve location.");
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const StepDots = () => (
     <div className="flex items-center gap-1">
@@ -3047,14 +3094,14 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
       </div>
 
       <div className="px-4 py-5">
-        {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
+        {/* Mitra Compact Banner - ONLY for Individual Citizen */}
         {role === "citizen" && (
           <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
             <MitraAssistant
               size="compact"
               variant="compact"
               message={t("mitra.rep.step2")}
-              subMessage={method === "gps" ? t("loc.confirmed") : undefined}
+              subMessage={gpsDone ? t("loc.confirmed") : undefined}
             />
           </div>
         )}
@@ -3083,57 +3130,98 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
           ))}
         </div>
 
+        {/* ── GPS Panel ── */}
         {method === "gps" && (
           <Card className="p-4 mb-5">
-            <div className="flex items-center gap-2 mb-3">
-              <CheckCircle size={18} color="var(--success)" />
-              <div>
-                <div className="text-sm font-semibold" style={{ color: "var(--success)" }}>{t("loc.detected")}</div>
-                <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Bakri Bazar, Piska Nagri, Kanke</div>
+            {!gpsDone && !isLocating && (
+              <button
+                onClick={handleGpsLocate}
+                className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95"
+                style={{ background: "var(--green)", color: "#fff" }}
+              >
+                <Navigation size={16} />
+                {t("rep.step2.gps")}
+              </button>
+            )}
+
+            {isLocating && (
+              <div className="flex items-center justify-center gap-2 py-3 text-sm" style={{ color: "var(--text-muted)" }}>
+                <Loader2 size={18} className="animate-spin" />
+                Detecting your location…
               </div>
-            </div>
-            <div className="rounded-xl overflow-hidden map-placeholder h-36 flex items-center justify-center mb-3">
-              <div className="relative z-10 bg-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg">
-                <MapPin size={22} color="var(--error)" />
+            )}
+
+            {gpsError && (
+              <div className="mt-3 p-3 rounded-xl text-xs font-medium" style={{ background: "var(--error-bg, #FEE2E2)", color: "var(--error, #DC2626)" }}>
+                ⚠ {gpsError}
               </div>
-            </div>
-            <div className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
-              <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
-                {t("loc.confirmed")}:
-              </p>
-              {[
-                ["loc.village", "Bakri Bazar"],
-                ["loc.panchayat", "Piska Nagri"],
-                ["loc.block", "Kanke"],
-                ["loc.district", "Ranchi, Jharkhand"],
-              ].map(([k, v]) => (
-                <div key={k} className="flex justify-between text-sm py-0.5">
-                  <span style={{ color: "var(--text-muted)" }}>{t(k)}</span>
-                  <span className="font-semibold" style={{ color: "var(--text)" }}>{v}</span>
+            )}
+
+            {gpsDone && reportData.latitude && (
+              <div className="mt-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle size={18} color="var(--success)" />
+                  <div>
+                    <div className="text-sm font-semibold" style={{ color: "var(--success)" }}>{t("loc.detected")}</div>
+                    <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                      {reportData.latitude}, {reportData.longitude}
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
+                <div className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
+                  <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
+                    {t("loc.confirmed")}:
+                  </p>
+                  <div className="flex justify-between text-sm py-0.5">
+                    <span style={{ color: "var(--text-muted)" }}>Latitude</span>
+                    <span className="font-semibold font-mono" style={{ color: "var(--text)" }}>{reportData.latitude}</span>
+                  </div>
+                  <div className="flex justify-between text-sm py-0.5">
+                    <span style={{ color: "var(--text-muted)" }}>Longitude</span>
+                    <span className="font-semibold font-mono" style={{ color: "var(--text)" }}>{reportData.longitude}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleGpsLocate}
+                  className="mt-2 w-full py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1"
+                  style={{ background: "var(--bg)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+                >
+                  <RefreshCw size={12} /> Re-detect
+                </button>
+              </div>
+            )}
           </Card>
         )}
 
+        {/* ── Interactive Map Panel ── */}
         {method === "map" && (
           <Card className="p-4 mb-5">
             <p className="text-sm font-semibold mb-2" style={{ color: "var(--text)" }}>
               <Map size={14} className="inline mr-1" /> {t("rep.step2.map_hint")}
             </p>
-            <div className="rounded-xl overflow-hidden map-placeholder h-56 flex items-center justify-center relative">
-              <div className="relative z-10 text-center">
-                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg mx-auto">
-                  <MapPin size={22} color="var(--error)" />
-                </div>
-                <div className="mt-2 px-3 py-1 rounded-full text-xs font-semibold bg-white shadow">
-                  {t("rep.step2.drag_hint")}
-                </div>
+            <LocationPickerMap
+              onLocationChange={(lat, lng) =>
+                setReportData(prev => ({
+                  ...prev,
+                  latitude: String(lat.toFixed(6)),
+                  longitude: String(lng.toFixed(6)),
+                }))
+              }
+              initialLatitude={reportData.latitude ? parseFloat(reportData.latitude) : undefined}
+              initialLongitude={reportData.longitude ? parseFloat(reportData.longitude) : undefined}
+            />
+            {reportData.latitude && reportData.longitude && (
+              <div className="mt-3 p-3 rounded-xl flex items-center justify-between" style={{ background: "var(--bg)" }}>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>Selected coordinates</span>
+                <span className="text-xs font-semibold font-mono" style={{ color: "var(--text)" }}>
+                  {reportData.latitude}, {reportData.longitude}
+                </span>
               </div>
-            </div>
+            )}
           </Card>
         )}
 
+        {/* ── Manual Selection Panel ── */}
         {method === "manual" && (
           <Card className="p-4 mb-5">
             {[
@@ -3166,7 +3254,13 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
 }
 
 // ─── REPORT STEP 3 ────────────────────────────────────────────────────────────
-function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
+function ReportStep3Screen({
+  onNav,
+  reportData,
+}: {
+  onNav: (s: Screen) => void;
+  reportData: ReportData;
+}) {
   const { t, role } = useApp();
   const StepDots = () => (
     <div className="flex items-center gap-1">
@@ -3197,7 +3291,7 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
       </div>
 
       <div className="px-4 py-5">
-        {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
+        {/* Mitra Compact Banner - ONLY for Individual Citizen */}
         {role === "citizen" && (
           <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
             <MitraAssistant
@@ -3226,9 +3320,20 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
               <p className="text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
                 <MapPin size={11} /> {t("rep.step3.loc_label")}
               </p>
-              <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                Bakri Bazar, Kanke Block, Ranchi
-              </p>
+              {reportData.latitude && reportData.longitude ? (
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                    Jharkhand, India
+                  </p>
+                  <p className="text-xs font-mono mt-1" style={{ color: "var(--text-muted)" }}>
+                    {reportData.latitude}, {reportData.longitude}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                  Bakri Bazar, Kanke Block, Ranchi
+                </p>
+              )}
             </div>
             <div className="flex gap-3">
               <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--success-bg)" }}>
@@ -5442,6 +5547,17 @@ export default function App() {
   const [showMitraWelcome, setShowMitraWelcome] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [reportData, setReportData] = useState<ReportData>({
+    description: "",
+    category: "",
+    district: "",
+    block: "",
+    panchayatWard: "",
+    landmark: "",
+    siteAddress: "",
+    latitude: "",
+    longitude: "",
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => setInitialLoading(false), 500);
@@ -5507,8 +5623,8 @@ export default function App() {
         {screen === "industry-login" && <IndustryLoginScreen {...props} />}
         {screen === "citizen-dashboard" && <CitizenDashboardScreen {...props} />}
         {screen === "report-step1" && <ReportStep1Screen {...props} />}
-        {screen === "report-step2" && <ReportStep2Screen {...props} />}
-        {screen === "report-step3" && <ReportStep3Screen {...props} />}
+        {screen === "report-step2" && <ReportStep2Screen {...props} reportData={reportData} setReportData={setReportData} />}
+        {screen === "report-step3" && <ReportStep3Screen {...props} reportData={reportData} />}
         {screen === "ai-processing" && <AIProcessingScreen {...props} />}
         {screen === "ai-result" && <AIResultScreen {...props} />}
         {screen === "submit-success" && <SubmitSuccessScreen {...props} />}
