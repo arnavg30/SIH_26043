@@ -14,6 +14,8 @@ import { type Lang, LANG_NAMES, makeT } from "./i18n";
 import { NavJharLogo } from "./components/NavJharLogo";
 import { MitraAssistant } from "./components/MitraAssistant";
 import LocationPickerMap from "./components/LocationPickerMap";
+import RecordedAudioPlayer from "./components/RecordedAudioPlayer";
+import useVoiceRecording from "./hooks/useVoiceRecording";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, reload, signOut } from "firebase/auth";
 import { auth } from "./firebase/config";
 import {
@@ -31,16 +33,17 @@ interface AppCtx {
   t: (key: string) => string;
   role: string;
   setRole: (r: string) => void;
-  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; latitude: string; longitude: string; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string };
+  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; audioDurationSeconds: number; latitude: string; longitude: string; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string };
   setReport: React.Dispatch<React.SetStateAction<AppCtx["report"]>>;
 }
 const Ctx = createContext<AppCtx>({
   lang: "en", setLang: () => {}, dark: false, setDark: () => {}, t: (k) => k,
   role: "citizen", setRole: () => {},
-  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" }, setReport: () => {},
+  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" }, setReport: () => {},
 });
 const useApp = () => useContext(Ctx);
 const isValidMobile = (value: string) => /^\d{10}$/.test(value.replace(/\D/g, ""));
+
 
 type ProfileDisplay = { name: string; detail: string };
 function useProfileDisplay(role: string): ProfileDisplay {
@@ -2785,16 +2788,36 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const { report, setReport } = useApp();
   const desc = report.description;
   const setDesc = (description: string) => setReport(current => ({ ...current, description }));
-  const [mode, setMode] = useState<"none" | "voice" | "text">("none");
+  const [mode, setMode] = useState<"none" | "voice" | "text">(() => report.files.some(file => file.type.startsWith("audio/")) ? "voice" : "none");
   const selCat = report.category || null;
   const setSelCat = (category: string | null) => setReport(current => ({ ...current, category: category || "", categoryId: category ? String(cats.findIndex(item => item.label === category) + 1) : "" }));
-  const [listening, setListening] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
+  const recordedAudio = report.files.find(file => file.type.startsWith("audio/"));
+  const recording = useVoiceRecording((file, duration) => {
+    setReport(current => {
+      const retained = current.files.map((item, index) => ({ file: item, preview: current.previews[index] }))
+        .filter(item => !item.file.type.startsWith("audio/"));
+      return {
+        ...current, evidence: "Voice recording", audioDurationSeconds: duration,
+        files: [...retained.map(item => item.file), file],
+        previews: [...retained.map(item => item.preview), ""],
+      };
+    });
+  });
+  const listening = recording.status === "recording";
+  const recordingError = recording.error;
+  const recordingSeconds = recording.seconds;
+  const stopRecording = recording.stop;
+  const startRecording = () => {
+    if (!recordedAudio && report.files.length >= 10) return;
+    return recording.start();
+  };
   const addMedia = (files: FileList | null, evidence: string) => {
     if (!files?.length) return;
-    const selected = Array.from(files);
-    setReport(current => ({ ...current, evidence, files: [...current.files, ...selected].slice(0, 10), previews: [...current.previews, ...selected.map(file => URL.createObjectURL(file))].slice(0, 10) }));
+    const selected = Array.from(files).slice(0, Math.max(0, 10 - report.files.length));
+    const previews = selected.map(file => URL.createObjectURL(file));
+    setReport(current => ({ ...current, evidence, files: [...current.files, ...selected], previews: [...current.previews, ...previews] }));
   };
 
   const cats = [
@@ -2875,7 +2898,11 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
           {t("rep.step1.describe")} <span style={{ color: "var(--error)" }}>*</span>
         </h2>
         <div className="flex gap-3 mb-4">
-          <button onClick={() => { setMode(mode === "voice" ? "none" : "voice"); setListening(false); }}
+          <button onClick={() => {
+            if (listening) stopRecording();
+            else { setMode("voice"); void startRecording(); }
+          }}
+            disabled={recording.status === "requesting" || recording.status === "processing"}
             className="flex-1 py-4 rounded-xl border-2 flex flex-col items-center gap-1 transition-all active:scale-95"
             style={{
               borderColor: mode === "voice" ? "var(--green)" : "var(--border)",
@@ -2884,7 +2911,7 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
             <Mic size={28} color={mode === "voice" ? "var(--green)" : "var(--text-muted)"} />
             <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>{t("rep.step1.voice")}</span>
           </button>
-          <button onClick={() => setMode(mode === "text" ? "none" : "text")}
+          <button disabled={recording.busy} onClick={() => setMode(mode === "text" ? "none" : "text")}
             className="flex-1 py-4 rounded-xl border-2 flex flex-col items-center gap-1 transition-all active:scale-95"
             style={{
               borderColor: mode === "text" ? "var(--navy)" : "var(--border)",
@@ -2898,14 +2925,23 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
         {mode === "voice" && (
           <div className="p-5 rounded-xl border-2 mb-4 text-center"
             style={{ borderColor: "var(--green)", background: "var(--success-bg)" }}>
-            {!listening ? (
+            {recording.status === "requesting" || recording.status === "processing" ? (
+              <p role="status" className="flex items-center justify-center gap-2 text-sm" style={{ color: "var(--text)" }}>
+                <Loader className="animate-spin" size={20} />
+                {recording.status === "requesting" ? "Waiting for microphone permission…" : "Preparing recording for playback…"}
+              </p>
+            ) : !listening ? (
               <>
-                <button onClick={() => setListening(true)}
+                <button onClick={() => void startRecording()}
+                  aria-label={recordedAudio ? "Record again" : "Start recording"}
                   className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 transition-all active:scale-95"
                   style={{ background: "var(--green)" }}>
                   <Mic size={30} color="white" />
                 </button>
-                <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>{t("rep.step1.tap_to_speak")}</p>
+                <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>{recordedAudio ? "Record again" : t("rep.step1.tap_to_speak")}</p>
+                {recordedAudio && <RecordedAudioPlayer file={recordedAudio} />}
+                {!recordedAudio && report.files.length >= 10 && <p className="text-xs mt-2">A report can contain up to 10 attachments.</p>}
+                {recordingError && <p className="text-xs mt-3" style={{ color: "var(--error)" }}>{recordingError}</p>}
               </>
             ) : (
               <>
@@ -2918,13 +2954,12 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
                     style={{ borderColor: "var(--green)" }} />
                 </div>
                 <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>{t("rep.step1.listening_text")}</p>
-                <p className="text-xs mt-2 italic px-4 py-2 rounded-xl"
-                  style={{ background: "var(--card)", color: "var(--text)" }}>
-                  "Hamare gaon ka handpump 2 haftton se kharab hai."
+                <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+                  {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")} • Your voice is being recorded
                 </p>
-                <button onClick={() => { setListening(false); setMode("text"); setDesc("Hamare gaon ka handpump 2 haftton se kharab hai. Paani aana band ho gaya hai."); }}
-                  className="mt-3 text-xs font-semibold underline" style={{ color: "var(--green)" }}>
-                  {t("rep.step1.use_text")}
+                <button onClick={stopRecording}
+                  className="mt-3 px-5 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: "var(--error)" }}>
+                  Stop & Save Recording
                 </button>
               </>
             )}
@@ -2958,11 +2993,11 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
           ))}
         </div>
         {report.files.length > 0 && <div className="grid grid-cols-3 gap-2 mb-6">{report.files.map((file, index) => <div key={`${file.name}-${index}`} className="rounded-xl border p-2 text-center overflow-hidden" style={{ borderColor: "var(--border)" }}>
-          {file.type.startsWith("image/") ? <img src={report.previews[index]} alt={file.name} className="w-full h-16 object-cover rounded-lg" /> : <Video size={22} className="mx-auto" color="var(--navy)" />}
+          {file.type.startsWith("image/") ? <img src={report.previews[index]} alt={file.name} className="w-full h-16 object-cover rounded-lg" /> : file.type.startsWith("audio/") ? <Mic size={22} className="mx-auto" color="var(--green)" /> : <Video size={22} className="mx-auto" color="var(--navy)" />}
           <p className="text-[10px] truncate mt-1" style={{ color: "var(--text-muted)" }}>{file.name}</p>
         </div>)}</div>}
 
-        <Btn onClick={() => onNav("report-step2")} disabled={!desc.trim() || !selCat} className="w-full py-4 text-base"
+        <Btn onClick={() => onNav("report-step2")} disabled={(!desc.trim() && !recordedAudio) || !selCat || recording.busy} className="w-full py-4 text-base"
           icon={<ArrowRight size={18} />}>
           {t("rep.step1.next")}
         </Btn>
@@ -2989,7 +3024,6 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
     locationWatchRef.current = null;
     locationTimerRef.current = null;
   };
-
   useEffect(() => () => stopLocationWatch(), []);
 
   const saveCoordinates = (latitude: number, longitude: number, locationMethod: string, addressDetails?: any) => {
@@ -3259,6 +3293,7 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
 function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
   const { report } = useApp();
+  const recordedAudio = report.files.find(file => file.type.startsWith("audio/"));
   const StepDots = () => (
     <div className="flex items-center gap-1">
       {[1, 2, 3].map(s => (
@@ -3309,9 +3344,23 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
               <p className="text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
                 <MessageSquare size={11} /> {t("rep.step3.desc_label")}
               </p>
-              <p className="text-sm" style={{ color: "var(--text)" }}>
-                {report.description}
-              </p>
+              {report.description.trim() && (
+                <p className="text-sm" style={{ color: "var(--text)" }}>{report.description}</p>
+              )}
+              {recordedAudio && (
+                <div className="mt-3 p-3 sm:p-4 rounded-xl border" style={{ background: "var(--success-bg)", borderColor: "var(--border)" }}>
+                  <div className="flex items-center gap-2" style={{ color: "var(--green)" }}>
+                    <Mic size={18} />
+                    <span className="text-sm font-semibold">{t("rep.step1.voice")}</span>
+                    {report.audioDurationSeconds > 0 && (
+                      <span className="ml-auto text-xs font-mono tabular-nums">
+                        {Math.floor(report.audioDurationSeconds / 60)}:{String(report.audioDurationSeconds % 60).padStart(2, "0")}
+                      </span>
+                    )}
+                  </div>
+                  <RecordedAudioPlayer file={recordedAudio} />
+                </div>
+              )}
             </div>
             <div className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
               <p className="text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
@@ -3327,7 +3376,9 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
                 <p className="text-xs font-bold" style={{ color: "var(--green)" }}>{report.category}</p>
               </div>
               <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--warning-bg)" }}>
-                <Camera size={16} color="var(--warning)" className="mx-auto mb-1" />
+                {recordedAudio && report.files.length === 1
+                  ? <Mic size={16} color="var(--warning)" className="mx-auto mb-1" />
+                  : <Camera size={16} color="var(--warning)" className="mx-auto mb-1" />}
                 <p className="text-xs font-bold" style={{ color: "var(--warning)" }}>{report.evidence || "No evidence added"}</p>
               </div>
             </div>
@@ -3424,8 +3475,9 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
       const data = new FormData();
       data.append("categoryId", report.categoryId);
       data.append("categoryName", report.category);
-      data.append("title", report.description.trim().slice(0, 100));
-      data.append("description", report.description);
+      const submittedDescription = report.description.trim() || "Problem details are attached as a voice recording.";
+      data.append("title", report.description.trim().slice(0, 100) || "Voice-recorded problem report");
+      data.append("description", submittedDescription);
       data.append("district", report.district || "Ranchi");
       data.append("block", report.block || "Kanke");
       data.append("panchayatWard", report.panchayat);
@@ -3436,6 +3488,7 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
         data.append("longitude", report.longitude);
       }
       report.files.forEach(file => data.append("media", file));
+      if (report.audioDurationSeconds) data.append("voiceDurationSeconds", String(report.audioDurationSeconds));
       const result = await submitProblem(data);
       setReport(current => ({ ...current, problemCode: result.problem.problem_code }));
       onNav("submit-success");
@@ -5554,7 +5607,7 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
   const [screen, setScreen] = useState<Screen>("landing");
   const [role, setRole] = useState("citizen");
-  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" });
+  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" });
   // On initial website load, show language selection popup, followed immediately by Mitra full-body welcome
   const [showLangModal, setShowLangModal] = useState(true);
   const [showMitraWelcome, setShowMitraWelcome] = useState(false);

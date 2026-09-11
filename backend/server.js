@@ -25,30 +25,35 @@ const firebaseAuth = getAuth();
 // ==================== OCI Object Storage ====================
 const common = require("oci-common");
 const objectstorage = require("oci-objectstorage");
-// const ociProvider = new common.ConfigFileAuthenticationDetailsProvider(
-//   "C:\\Users\\arnav\\.oci\\config.txt"
-// );
-// const objectStorageClient = new objectstorage.ObjectStorageClient({
-//   authenticationDetailsProvider: ociProvider,
-// });
+const OCI_CONFIG_FILE = "C:\\Users\\arnav\\.oci\\config.txt";
 let namespaceName = process.env.OCI_NAMESPACE;
 const bucketName = process.env.OCI_BUCKET_NAME;
-async function uploadToOCI(file, objectName) {
-  const ociProvider = new common.ConfigFileAuthenticationDetailsProvider(
-    "C:\\Users\\arnav\\.oci\\config.txt"
-  );
+let objectStorageClient;
 
-  const objectStorageClient = new objectstorage.ObjectStorageClient({
-    authenticationDetailsProvider: ociProvider,
-  });
-
-  if (!namespaceName) {
-    const namespaceResponse = await objectStorageClient.getNamespace({});
-    namespaceName = namespaceResponse.value;
-  }
+function getOCIClient() {
+  if (objectStorageClient) return objectStorageClient;
   if (!bucketName) throw new Error("OCI_BUCKET_NAME is not configured");
 
-  await objectStorageClient.putObject({
+  const ociProvider = new common.ConfigFileAuthenticationDetailsProvider(
+    OCI_CONFIG_FILE,
+    "DEFAULT"
+  );
+
+  objectStorageClient = new objectstorage.ObjectStorageClient({
+    authenticationDetailsProvider: ociProvider,
+  });
+  return objectStorageClient;
+}
+
+async function uploadToOCI(file, objectName) {
+  const client = getOCIClient();
+
+  if (!namespaceName) {
+    const namespaceResponse = await client.getNamespace({});
+    namespaceName = namespaceResponse.value;
+  }
+
+  await client.putObject({
     namespaceName,
     bucketName,
     objectName,
@@ -597,7 +602,10 @@ app.get("/api/categories", async (req, res) => {
 
 // ---------------- Problems ----------------
 const multer = require("multer");
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 10, fileSize: 50 * 1024 * 1024 },
+});
 app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, res) => {
   const client = await pool.connect();
   const mediaFiles = req.files || [];
@@ -609,7 +617,7 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
       categoryId: rawCategoryId, categoryName, title, description, latitude, longitude,
       district, block, panchayatWard, landmark, siteAddress,
       reportedFor = "Myself", beneficiaryName, beneficiaryPhone, isAnonymous = false,
-      severity = "MEDIUM",
+      severity = "MEDIUM", voiceDurationSeconds,
     } = req.body || {};
 
     if ((!rawCategoryId && !clean(categoryName)) || !clean(title) || !clean(description) || !clean(district) || !clean(block) || !clean(siteAddress)) {
@@ -652,20 +660,25 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
 
       await client.query(
     `INSERT INTO problem_media
-      (problem_id, media_type, file_url, storage_path, file_name, mime_type, file_size)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      (problem_id, media_type, file_url, storage_path, file_name, mime_type, file_size, duration_seconds)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       result.rows[0].problem_id,
-      file.mimetype.startsWith("image/")
-        ? "IMAGE"
-        : file.mimetype.startsWith("video/")
-        ? "VIDEO"
-        : "DOCUMENT",
+       file.mimetype.startsWith("image/")
+         ? "IMAGE"
+         : file.mimetype.startsWith("video/")
+         ? "VIDEO"
+         : file.mimetype.startsWith("audio/")
+         ? "AUDIO"
+         : "DOCUMENT",
        fileUrl,
        storagePath,
       file.originalname,
-      file.mimetype,
-      file.size,
+       file.mimetype,
+       file.size,
+       file.mimetype.startsWith("audio/") && voiceDurationSeconds
+         ? Math.max(0, Math.min(300, Number.parseInt(voiceDurationSeconds, 10) || 0))
+         : null,
     ]
       );
 }
