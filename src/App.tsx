@@ -13,6 +13,7 @@ import {
 import { type Lang, LANG_NAMES, makeT } from "./i18n";
 import { NavJharLogo } from "./components/NavJharLogo";
 import { MitraAssistant } from "./components/MitraAssistant";
+import LocationPickerMap from "./components/LocationPickerMap";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, reload, signOut } from "firebase/auth";
 import { auth } from "./firebase/config";
 import {
@@ -30,13 +31,13 @@ interface AppCtx {
   t: (key: string) => string;
   role: string;
   setRole: (r: string) => void;
-  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string };
+  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; latitude: string; longitude: string; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string };
   setReport: React.Dispatch<React.SetStateAction<AppCtx["report"]>>;
 }
 const Ctx = createContext<AppCtx>({
   lang: "en", setLang: () => {}, dark: false, setDark: () => {}, t: (k) => k,
   role: "citizen", setRole: () => {},
-  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" }, setReport: () => {},
+  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" }, setReport: () => {},
 });
 const useApp = () => useContext(Ctx);
 const isValidMobile = (value: string) => /^\d{10}$/.test(value.replace(/\D/g, ""));
@@ -2972,9 +2973,48 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
   const { report, setReport } = useApp();
   const [method, setMethod] = useState<"none" | "gps" | "map" | "manual">("none");
-  const [dist, setDist] = useState("");
-  const [block, setBlock] = useState("");
-  const [panch, setPanch] = useState("");
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  const saveCoordinates = (latitude: number, longitude: number, locationMethod: "GPS" | "Map") => {
+    setLocationError(null);
+    setReport(current => ({ ...current, latitude: latitude.toFixed(6), longitude: longitude.toFixed(6), locationMethod }));
+  };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError("Location is not supported by this browser. Please select the point on the map.");
+      return;
+    }
+    if (!window.isSecureContext) {
+      setLocationError("Current location requires a secure (HTTPS) connection. Open the app through its HTTPS preview link.");
+      return;
+    }
+    setMethod("gps");
+    setLocationError(null);
+    setIsLocating(true);
+    const locate = (options: PositionOptions, allowFallback: boolean) => {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => { saveCoordinates(coords.latitude, coords.longitude, "GPS"); setIsLocating(false); },
+        (error) => {
+          // Some devices cannot get a high-accuracy GPS lock indoors. Retry once using network location.
+          if (allowFallback && (error.code === 2 || error.code === 3)) {
+            locate({ enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }, false);
+            return;
+          }
+          const message = error.code === 1
+            ? "Location permission was blocked. Allow Location for this site in your browser, then try again."
+            : error.code === 3
+              ? "Location request timed out. Move near a window or select the point on the map."
+              : "Your device could not determine a location. Select the point on the map instead.";
+          setLocationError(message);
+          setIsLocating(false);
+        },
+        options
+      );
+    };
+    locate({ enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }, true);
+  };
 
 
   const StepDots = () => (
@@ -3025,7 +3065,11 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
             { method: "map" as const, icon: <Map size={24} />, label: t("rep.step2.map"), color: "var(--navy)" },
             { method: "manual" as const, icon: <Building2 size={24} />, label: t("rep.step2.manual"), color: "#7C3AED" },
           ].map(opt => (
-            <button key={opt.method} onClick={() => { setMethod(opt.method); setReport(current => opt.method === "gps" ? { ...current, locationMethod: "GPS", district: "Ranchi", block: "Kanke", panchayat: "Piska Nagri", village: "Bakri Bazar" } : { ...current, locationMethod: opt.method }); }}
+            <button key={opt.method} onClick={() => {
+              setMethod(opt.method);
+              if (opt.method === "gps") useCurrentLocation();
+              else { setLocationError(null); setReport(current => ({ ...current, locationMethod: opt.method === "map" ? "Map" : "Manual" })); }
+            }}
               className="w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all active:scale-95"
               style={{
                 borderColor: method === opt.method ? opt.color : "var(--border)",
@@ -3046,33 +3090,13 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
         {method === "gps" && (
           <Card className="p-4 mb-5">
             <div className="flex items-center gap-2 mb-3">
-              <CheckCircle size={18} color="var(--success)" />
+              {report.latitude && report.longitude ? <CheckCircle size={18} color="var(--success)" /> : <Navigation size={18} color="var(--amber)" />}
               <div>
-                <div className="text-sm font-semibold" style={{ color: "var(--success)" }}>{t("loc.detected")}</div>
-                <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Bakri Bazar, Piska Nagri, Kanke</div>
+                <div className="text-sm font-semibold" style={{ color: report.latitude && report.longitude ? "var(--success)" : "var(--text)" }}>{report.latitude && report.longitude ? t("loc.detected") : "Detecting your location…"}</div>
+                <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Your browser location is used only for this report.</div>
               </div>
             </div>
-            <div className="rounded-xl overflow-hidden map-placeholder h-36 flex items-center justify-center mb-3">
-              <div className="relative z-10 bg-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg">
-                <MapPin size={22} color="var(--error)" />
-              </div>
-            </div>
-            <div className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
-              <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
-                {t("loc.confirmed")}:
-              </p>
-              {[
-                ["loc.village", "Bakri Bazar"],
-                ["loc.panchayat", "Piska Nagri"],
-                ["loc.block", "Kanke"],
-                ["loc.district", "Ranchi, Jharkhand"],
-              ].map(([k, v]) => (
-                <div key={k} className="flex justify-between text-sm py-0.5">
-                  <span style={{ color: "var(--text-muted)" }}>{t(k)}</span>
-                  <span className="font-semibold" style={{ color: "var(--text)" }}>{v}</span>
-                </div>
-              ))}
-            </div>
+            <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "GPS")} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} height="190px" />
           </Card>
         )}
 
@@ -3081,16 +3105,7 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
             <p className="text-sm font-semibold mb-2" style={{ color: "var(--text)" }}>
               <Map size={14} className="inline mr-1" /> {t("rep.step2.map_hint")}
             </p>
-            <div className="rounded-xl overflow-hidden map-placeholder h-56 flex items-center justify-center relative">
-              <div className="relative z-10 text-center">
-                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg mx-auto">
-                  <MapPin size={22} color="var(--error)" />
-                </div>
-                <div className="mt-2 px-3 py-1 rounded-full text-xs font-semibold bg-white shadow">
-                  {t("rep.step2.drag_hint")}
-                </div>
-              </div>
-            </div>
+            <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Map")} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} height="224px" />
           </Card>
         )}
 
@@ -3115,7 +3130,7 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
         )}
 
         {method !== "none" && (
-          <Btn onClick={() => onNav("report-step3")} disabled={method === "manual" && (!report.district || !report.block || !report.panchayat || !report.village)} className="w-full py-4 text-base"
+          <Btn onClick={() => onNav("report-step3")} disabled={(method === "manual" && (!report.district || !report.block || !report.panchayat || !report.village)) || ((method === "gps" || method === "map") && (!report.latitude || !report.longitude))} className="w-full py-4 text-base"
             icon={<ArrowRight size={18} />}>
             {t("rep.step2.confirm")}
           </Btn>
@@ -3301,6 +3316,10 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
       data.append("panchayatWard", report.panchayat);
       data.append("landmark", report.village);
       data.append("siteAddress", [report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Map-selected location");
+      if (report.latitude && report.longitude) {
+        data.append("latitude", report.latitude);
+        data.append("longitude", report.longitude);
+      }
       report.files.forEach(file => data.append("media", file));
       const result = await submitProblem(data);
       setReport(current => ({ ...current, problemCode: result.problem.problem_code }));
@@ -5451,7 +5470,7 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
   const [screen, setScreen] = useState<Screen>("landing");
   const [role, setRole] = useState("citizen");
-  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" });
+  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" });
   // On initial website load, show language selection popup, followed immediately by Mitra full-body welcome
   const [showLangModal, setShowLangModal] = useState(true);
   const [showMitraWelcome, setShowMitraWelcome] = useState(false);

@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
+@import 'leaflet/dist/leaflet.css';
 @custom-variant dark (&:where(.dark, .dark *));
 
 html, body, #root {
@@ -124,3 +125,23 @@ button, a, .card-hover {
 button:active, a:active {
   transform: scale(0.97);
 }
+
+/* Leaflet Container & Pin Styles */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  font-family: inherit;
+  z-index: 1;
+}
+.leaflet-pane {
+  z-index: 1 !important;
+}
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 2 !important;
+}
+.navjhar-leaflet-pin {
+  background: transparent;
+  border: none;
+}
+
