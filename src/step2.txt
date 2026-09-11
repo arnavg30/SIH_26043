@@ -1,0 +1,173 @@
+﻿function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t, role } = useApp();
+  const { report, setReport } = useApp();
+  const [method, setMethod] = useState<"none" | "gps" | "map" | "manual">("none");
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  const saveCoordinates = (latitude: number, longitude: number, locationMethod: "GPS" | "Map") => {
+    setLocationError(null);
+    setReport(current => ({ ...current, latitude: latitude.toFixed(6), longitude: longitude.toFixed(6), locationMethod }));
+  };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError("Location is not supported by this browser. Please select the point on the map.");
+      return;
+    }
+    if (!window.isSecureContext) {
+      setLocationError("Current location requires a secure (HTTPS) connection. Open the app through its HTTPS preview link.");
+      return;
+    }
+    setMethod("gps");
+    setLocationError(null);
+    setIsLocating(true);
+    const locate = (options: PositionOptions, allowFallback: boolean) => {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => { saveCoordinates(coords.latitude, coords.longitude, "GPS"); setIsLocating(false); },
+        (error) => {
+          // Some devices cannot get a high-accuracy GPS lock indoors. Retry once using network location.
+          if (allowFallback && (error.code === 2 || error.code === 3)) {
+            locate({ enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }, false);
+            return;
+          }
+          const message = error.code === 1
+            ? "Location permission was blocked. Allow Location for this site in your browser, then try again."
+            : error.code === 3
+              ? "Location request timed out. Move near a window or select the point on the map."
+              : "Your device could not determine a location. Select the point on the map instead.";
+          setLocationError(message);
+          setIsLocating(false);
+        },
+        options
+      );
+    };
+    locate({ enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }, true);
+  };
+
+
+  const StepDots = () => (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3].map(s => (
+        <div key={s} className="flex items-center gap-1">
+          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+            style={{
+              background: s <= 2 ? "var(--amber)" : "rgba(255,255,255,0.2)",
+              color: s <= 2 ? "var(--navy)" : "rgba(255,255,255,0.5)"
+            }}>{s === 1 ? <CheckCircle size={12} /> : s}</div>
+          {s < 3 && <div className="w-5 h-0.5" style={{ background: s < 2 ? "var(--amber)" : "rgba(255,255,255,0.2)" }} />}
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
+      <div className="sticky top-0 z-10 px-4 py-4" style={{ background: "var(--nav-bg)" }}>
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => onNav("report-step1")} className="flex items-center gap-1 text-sm"
+            style={{ color: "rgba(255,255,255,0.7)" }}>
+            <ArrowLeft size={15} /> {t("btn.back")}
+          </button>
+          <StepDots />
+          <div className="w-14" />
+        </div>
+        <h1 className="text-xl font-black text-white">{t("rep.step2.title")}</h1>
+      </div>
+
+      <div className="px-4 py-5">
+        {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
+        {role === "citizen" && (
+          <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
+            <MitraAssistant
+              size="compact"
+              variant="compact"
+              message={t("mitra.rep.step2")}
+              subMessage={method === "gps" ? t("loc.confirmed") : undefined}
+            />
+          </div>
+        )}
+
+        <div className="space-y-3 mb-5">
+          {[
+            { method: "gps" as const, icon: <Navigation size={24} />, label: t("rep.step2.gps"), color: "var(--green)" },
+            { method: "map" as const, icon: <Map size={24} />, label: t("rep.step2.map"), color: "var(--navy)" },
+            { method: "manual" as const, icon: <Building2 size={24} />, label: t("rep.step2.manual"), color: "#7C3AED" },
+          ].map(opt => (
+            <button key={opt.method} onClick={() => {
+              setMethod(opt.method);
+              if (opt.method === "gps") useCurrentLocation();
+              else { setLocationError(null); setReport(current => ({ ...current, locationMethod: opt.method === "map" ? "Map" : "Manual" })); }
+            }}
+              className="w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all active:scale-95"
+              style={{
+                borderColor: method === opt.method ? opt.color : "var(--border)",
+                background: method === opt.method ? `color-mix(in srgb, ${opt.color} 8%, var(--card))` : "var(--card)"
+              }}>
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ background: `color-mix(in srgb, ${opt.color} 12%, transparent)`, color: opt.color }}>
+                {opt.icon}
+              </div>
+              <div className="flex-1 text-left">
+                <div className="font-bold text-sm" style={{ color: "var(--text)" }}>{opt.label}</div>
+              </div>
+              {method === opt.method && <CheckCircle size={20} color={opt.color} />}
+            </button>
+          ))}
+        </div>
+
+        {method === "gps" && (
+          <Card className="p-4 mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              {report.latitude && report.longitude ? <CheckCircle size={18} color="var(--success)" /> : <Navigation size={18} color="var(--amber)" />}
+              <div>
+                <div className="text-sm font-semibold" style={{ color: report.latitude && report.longitude ? "var(--success)" : "var(--text)" }}>{report.latitude && report.longitude ? t("loc.detected") : "Detecting your locationâ€¦"}</div>
+                <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Your browser location is used only for this report.</div>
+              </div>
+            </div>
+            <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "GPS")} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} height="190px" />
+          </Card>
+        )}
+
+        {method === "map" && (
+          <Card className="p-4 mb-5">
+            <p className="text-sm font-semibold mb-2" style={{ color: "var(--text)" }}>
+              <Map size={14} className="inline mr-1" /> {t("rep.step2.map_hint")}
+            </p>
+            <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Map")} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} height="224px" />
+          </Card>
+        )}
+
+        {method === "manual" && (
+          <Card className="p-4 mb-5">
+            {[
+              { key: "loc.district", opts: ["Ranchi", "Dhanbad", "Bokaro", "Jamshedpur", "Giridih"] },
+              { key: "loc.block", opts: ["Kanke", "Namkum", "Ratu", "Ormanjhi"] },
+              { key: "loc.panchayat", opts: ["Piska Nagri", "Tatisilwai", "Murma"] },
+              { key: "loc.village", opts: ["Bakri Bazar", "Lalgutwa", "Harmu"] },
+            ].map(f => (
+              <div key={f.key} className="mb-3">
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>{t(f.key)}</label>
+                <select value={f.key === "loc.district" ? report.district : f.key === "loc.block" ? report.block : f.key === "loc.panchayat" ? report.panchayat : report.village} onChange={e => setReport(current => ({ ...current, [f.key === "loc.district" ? "district" : f.key === "loc.block" ? "block" : f.key === "loc.panchayat" ? "panchayat" : "village"]: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}>
+                  <option value="">Selectâ€¦</option>
+                  {f.opts.map(o => <option key={o}>{o}</option>)}
+                </select>
+              </div>
+            ))}
+          </Card>
+        )}
+
+        {method !== "none" && (
+          <Btn onClick={() => onNav("report-step3")} disabled={(method === "manual" && (!report.district || !report.block || !report.panchayat || !report.village)) || ((method === "gps" || method === "map") && (!report.latitude || !report.longitude))} className="w-full py-4 text-base"
+            icon={<ArrowRight size={18} />}>
+            {t("rep.step2.confirm")}
+          </Btn>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// â”€â”€â”€ REPORT STEP 3 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {

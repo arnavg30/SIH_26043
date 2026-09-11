@@ -2972,13 +2972,70 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
 function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
   const { report, setReport } = useApp();
-  const [method, setMethod] = useState<"none" | "gps" | "map" | "manual">("none");
+  const [method, setMethod] = useState<"none" | "gps" | "map" | "address" | "profile">("none");
+  const [addressInput, setAddressInput] = useState("");
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
 
-  const saveCoordinates = (latitude: number, longitude: number, locationMethod: "GPS" | "Map") => {
+  const saveCoordinates = (latitude: number, longitude: number, locationMethod: string, addressDetails?: any) => {
     setLocationError(null);
-    setReport(current => ({ ...current, latitude: latitude.toFixed(6), longitude: longitude.toFixed(6), locationMethod }));
+    setReport(current => ({ 
+      ...current, 
+      latitude: latitude.toFixed(6), 
+      longitude: longitude.toFixed(6), 
+      locationMethod,
+      ...(addressDetails || {})
+    }));
+  };
+
+  const geocodeAddress = async (query: string, methodLabel: string) => {
+    setIsLocating(true);
+    setLocationError(null);
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      if (data && data.length > 0) {
+        saveCoordinates(parseFloat(data[0].lat), parseFloat(data[0].lon), methodLabel, { village: query });
+      } else {
+        setLocationError("Address not found. Please try again or choose on map.");
+      }
+    } catch (e) {
+      setLocationError("Failed to fetch location. Please try again.");
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  const useProfileLocation = async () => {
+    setMethod("profile");
+    setIsLocating(true);
+    setLocationError(null);
+    try {
+      const res = await getProfileMe();
+      if (res?.profile) {
+        const p = res.profile;
+        const queryParts = [
+          p.house_number, p.landmark, p.city_village, p.district, p.pincode,
+          p.office_address, p.villages_covered, p.block, p.panchayat_area,
+          p.institutional_address, p.company_address, p.registered_address
+        ].filter(Boolean);
+        
+        if (queryParts.length > 0) {
+          const query = queryParts.slice(0, 4).join(", ");
+          await geocodeAddress(query, "Profile");
+          setReport(current => ({ ...current, district: p.district || current.district, block: p.block || current.block, village: query }));
+        } else {
+          setLocationError("No saved address found in your profile.");
+          setIsLocating(false);
+        }
+      } else {
+        setLocationError("Could not retrieve profile.");
+        setIsLocating(false);
+      }
+    } catch (e) {
+      setLocationError("Failed to access saved address.");
+      setIsLocating(false);
+    }
   };
 
   const useCurrentLocation = () => {
@@ -2997,7 +3054,6 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
       navigator.geolocation.getCurrentPosition(
         ({ coords }) => { saveCoordinates(coords.latitude, coords.longitude, "GPS"); setIsLocating(false); },
         (error) => {
-          // Some devices cannot get a high-accuracy GPS lock indoors. Retry once using network location.
           if (allowFallback && (error.code === 2 || error.code === 3)) {
             locate({ enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }, false);
             return;
@@ -3047,7 +3103,6 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
       </div>
 
       <div className="px-4 py-5">
-        {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
         {role === "citizen" && (
           <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
             <MitraAssistant
@@ -3061,14 +3116,16 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
 
         <div className="space-y-3 mb-5">
           {[
-            { method: "gps" as const, icon: <Navigation size={24} />, label: t("rep.step2.gps"), color: "var(--green)" },
-            { method: "map" as const, icon: <Map size={24} />, label: t("rep.step2.map"), color: "var(--navy)" },
-            { method: "manual" as const, icon: <Building2 size={24} />, label: t("rep.step2.manual"), color: "#7C3AED" },
+            { method: "gps" as const, icon: <Navigation size={24} />, label: "Current Location", color: "var(--green)" },
+            { method: "address" as const, icon: <Building2 size={24} />, label: "Enter Problem Address", color: "#7C3AED" },
+            { method: "profile" as const, icon: <UserCheck size={24} />, label: "Use Saved Address", color: "#F59E0B" },
+            { method: "map" as const, icon: <Map size={24} />, label: "Choose on Map", color: "var(--navy)" },
           ].map(opt => (
             <button key={opt.method} onClick={() => {
               setMethod(opt.method);
               if (opt.method === "gps") useCurrentLocation();
-              else { setLocationError(null); setReport(current => ({ ...current, locationMethod: opt.method === "map" ? "Map" : "Manual" })); }
+              else if (opt.method === "profile") useProfileLocation();
+              else { setLocationError(null); setReport(current => ({ ...current, locationMethod: opt.method === "map" ? "Map" : "Address" })); }
             }}
               className="w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all active:scale-95"
               style={{
@@ -3100,6 +3157,51 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
           </Card>
         )}
 
+        {method === "address" && (
+          <Card className="p-4 mb-5">
+            <div className="mb-3">
+               <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Problem Address</label>
+               <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="e.g. MG Road, Ranchi"
+                    value={addressInput}
+                    onChange={e => setAddressInput(e.target.value)}
+                    className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none"
+                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                  <Btn 
+                    onClick={() => geocodeAddress(addressInput, "Address")} 
+                    disabled={!addressInput || isLocating}
+                    className="px-4"
+                  >
+                    {isLocating ? <RefreshCw size={16} className="animate-spin" /> : "Search"}
+                  </Btn>
+               </div>
+            </div>
+            {report.latitude && report.longitude && (
+              <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Address")} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} height="190px" />
+            )}
+            {locationError && !report.latitude && (
+              <div className="text-red-500 text-xs mt-2">{locationError}</div>
+            )}
+          </Card>
+        )}
+
+        {method === "profile" && (
+          <Card className="p-4 mb-5">
+            <div className="mb-3 text-sm font-medium" style={{ color: "var(--text)" }}>
+              {isLocating ? "Fetching and geocoding your saved profile address..." : (report.latitude && report.longitude ? "Profile address geocoded successfully. You can adjust the pin." : "")}
+            </div>
+            {report.latitude && report.longitude && (
+              <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Profile")} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} height="190px" />
+            )}
+            {locationError && !report.latitude && (
+              <div className="text-red-500 text-xs mt-2">{locationError}</div>
+            )}
+          </Card>
+        )}
+
         {method === "map" && (
           <Card className="p-4 mb-5">
             <p className="text-sm font-semibold mb-2" style={{ color: "var(--text)" }}>
@@ -3109,28 +3211,8 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
           </Card>
         )}
 
-        {method === "manual" && (
-          <Card className="p-4 mb-5">
-            {[
-              { key: "loc.district", opts: ["Ranchi", "Dhanbad", "Bokaro", "Jamshedpur", "Giridih"] },
-              { key: "loc.block", opts: ["Kanke", "Namkum", "Ratu", "Ormanjhi"] },
-              { key: "loc.panchayat", opts: ["Piska Nagri", "Tatisilwai", "Murma"] },
-              { key: "loc.village", opts: ["Bakri Bazar", "Lalgutwa", "Harmu"] },
-            ].map(f => (
-              <div key={f.key} className="mb-3">
-                <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>{t(f.key)}</label>
-                <select value={f.key === "loc.district" ? report.district : f.key === "loc.block" ? report.block : f.key === "loc.panchayat" ? report.panchayat : report.village} onChange={e => setReport(current => ({ ...current, [f.key === "loc.district" ? "district" : f.key === "loc.block" ? "block" : f.key === "loc.panchayat" ? "panchayat" : "village"]: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}>
-                  <option value="">Select…</option>
-                  {f.opts.map(o => <option key={o}>{o}</option>)}
-                </select>
-              </div>
-            ))}
-          </Card>
-        )}
-
         {method !== "none" && (
-          <Btn onClick={() => onNav("report-step3")} disabled={(method === "manual" && (!report.district || !report.block || !report.panchayat || !report.village)) || ((method === "gps" || method === "map") && (!report.latitude || !report.longitude))} className="w-full py-4 text-base"
+          <Btn onClick={() => onNav("report-step3")} disabled={!report.latitude || !report.longitude} className="w-full py-4 text-base"
             icon={<ArrowRight size={18} />}>
             {t("rep.step2.confirm")}
           </Btn>
