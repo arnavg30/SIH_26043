@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
-export default function RecordedAudioPlayer({ file }: { file: File }) {
+export default function RecordedAudioPlayer({
+  file,
+  compact = false,
+}: {
+  file: File;
+  compact?: boolean;
+}) {
   const playerRef = useRef<HTMLAudioElement>(null);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
@@ -8,7 +14,6 @@ export default function RecordedAudioPlayer({ file }: { file: File }) {
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
-    // Each player owns its URL, including after StrictMode remounts and re-recording.
     const url = URL.createObjectURL(file);
     setError("");
     setReady(false);
@@ -21,6 +26,27 @@ export default function RecordedAudioPlayer({ file }: { file: File }) {
       URL.revokeObjectURL(url);
     };
   }, [file]);
+
+  if (compact) {
+    return (
+      <div className="w-full">
+        <audio
+          ref={playerRef}
+          controls
+          preload="auto"
+          aria-label="Recorded audio"
+          className="w-full h-8"
+          style={{ maxHeight: "32px" }}
+          onCanPlay={() => setReady(true)}
+          onError={() => {
+            setReady(false);
+            setError("Could not play audio.");
+          }}
+        />
+        {error && <p className="text-[10px] text-red-500 mt-1">{error}</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="mt-4">

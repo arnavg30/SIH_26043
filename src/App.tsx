@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
 import {
-  Sun, Moon, Globe, ChevronRight, MapPin, Mic, MicOff, Keyboard,
+  Sun, Moon, Globe, ChevronRight, MapPin, Mic, MicOff, Keyboard, Paperclip,
   Camera, Upload, Video, Bell, User, Users, Building2, GraduationCap,
   Briefcase, Home, FileText, Map, Navigation, CheckCircle, Clock,
   AlertTriangle, XCircle, Loader, Search, Filter, ArrowLeft, ArrowRight,
@@ -11,6 +11,7 @@ import {
   ClipboardList, HelpCircle, Volume2, UserCheck, Building, Factory, Edit2, Mail,
 } from "lucide-react";
 import { type Lang, LANG_NAMES, makeT } from "./i18n";
+import CameraCaptureModal from "./components/CameraCaptureModal";
 import { NavJharLogo } from "./components/NavJharLogo";
 import { MitraAssistant } from "./components/MitraAssistant";
 import LocationPickerMap from "./components/LocationPickerMap";
@@ -1071,7 +1072,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
         });
       } else {
         // Citizen
-        if (!citName.trim() || !citCity.trim() || !citPincode.trim() || !citDistrict.trim() || !isValidMobile(citPhone)) {
+        if (!citName.trim() || !citGender.trim() || !citDob.trim() || !citCity.trim() || !citPincode.trim() || !citDistrict.trim() || !isValidMobile(citPhone)) {
           setErrorMsg("Fill all required fields and enter a valid 10-digit mobile number.");
           setLoading(false);
           return;
@@ -1080,7 +1081,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
           name: citName,
           phoneNumber: citPhone,
           gender: citGender,
-          dateOfBirth: citDob || undefined,
+          dateOfBirth: citDob,
           houseNumber: citHouse,
           cityVillage: citCity,
           pincode: citPincode,
@@ -1150,7 +1151,9 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
                 required
                 pattern="[0-9]{10}"
                 value={panchPhone}
-                onChange={e => setPanchPhone(e.target.value)}
+                maxLength={10}
+                inputMode="numeric"
+                onChange={e => setPanchPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                 placeholder="98765 43210"
                 className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none"
                 style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
@@ -1276,7 +1279,9 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
                 required
                 pattern="[0-9]{10}"
                 value={orgPhone}
-                onChange={e => setOrgPhone(e.target.value)}
+                maxLength={10}
+                inputMode="numeric"
+                onChange={e => setOrgPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                 placeholder="98765 43210"
                 className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none"
                 style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
@@ -1379,7 +1384,9 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
               required
               pattern="[0-9]{10}"
               value={citPhone}
-              onChange={e => setCitPhone(e.target.value)}
+              maxLength={10}
+              inputMode="numeric"
+              onChange={e => setCitPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
               placeholder="98765 43210"
               onFocus={() => setActiveField("phone")}
               className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none"
@@ -1390,7 +1397,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
         <div className="grid grid-cols-2 gap-2 mb-3">
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-              {t("profile.gender")}
+              {t("profile.gender")} <span style={{ color: "var(--error)" }}>*</span>
             </label>
             <select
               value={citGender}
@@ -1406,7 +1413,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-              {t("profile.dob")}
+              {t("profile.dob")} <span style={{ color: "var(--error)" }}>*</span>
             </label>
             <input
               type="date"
@@ -2112,7 +2119,9 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
                       required
                       pattern="[0-9]{10}"
                       value={spocPhone}
-                      onChange={e => setSpocPhone(e.target.value)}
+                      maxLength={10}
+                      inputMode="numeric"
+                      onChange={e => setSpocPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       placeholder="98765 43210"
                       className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none"
                       style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
@@ -2457,7 +2466,9 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
                       required
                       pattern="[0-9]{10}"
                       value={spocPhone}
-                      onChange={e => setSpocPhone(e.target.value)}
+                      maxLength={10}
+                      inputMode="numeric"
+                      onChange={e => setSpocPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       placeholder="98765 43210"
                       className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none"
                       style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
@@ -2715,7 +2726,9 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
                       required
                       pattern="[0-9]{10}"
                       value={spocPhone}
-                      onChange={e => setSpocPhone(e.target.value)}
+                      maxLength={10}
+                      inputMode="numeric"
+                      onChange={e => setSpocPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       placeholder="98765 43210"
                       className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none"
                       style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
@@ -2794,6 +2807,48 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const setSelCat = (category: string | null) => setReport(current => ({ ...current, category: category || "", categoryId: category ? String(cats.findIndex(item => item.label === category) + 1) : "" }));
   const imageInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+
+  const handleCapturePhoto = (file: File) => {
+    const previewUrl = URL.createObjectURL(file);
+    setReport(current => ({
+      ...current,
+      evidence: "Photo upload",
+      files: [...current.files, file],
+      previews: [...current.previews, previewUrl],
+    }));
+  };
+
+  const removeAttachment = (indexToRemove: number) => {
+    setReport(current => {
+      const removedPreview = current.previews[indexToRemove];
+      if (removedPreview && removedPreview.startsWith("blob:")) {
+        try { URL.revokeObjectURL(removedPreview); } catch (_) {}
+      }
+      const newFiles = current.files.filter((_, idx) => idx !== indexToRemove);
+      const newPreviews = current.previews.filter((_, idx) => idx !== indexToRemove);
+      const remainingAudio = newFiles.find(f => f.type.startsWith("audio/"));
+      return {
+        ...current,
+        files: newFiles,
+        previews: newPreviews,
+        audioDurationSeconds: remainingAudio ? current.audioDurationSeconds : 0,
+        evidence: newFiles.length > 0 ? current.evidence : "",
+      };
+    });
+  };
+
+  const handleTakePhotoClick = () => {
+    if (report.files.length >= 10) return;
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      setIsCameraOpen(true);
+    } else if (cameraInput.current) {
+      cameraInput.current.click();
+    } else if (imageInput.current) {
+      imageInput.current.click();
+    }
+  };
   const recordedAudio = report.files.find(file => file.type.startsWith("audio/"));
   const recording = useVoiceRecording((file, duration) => {
     setReport(current => {
@@ -2978,25 +3033,160 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
         )}
 
         <h2 className="font-semibold text-sm mb-3" style={{ color: "var(--text)" }}>{t("rep.step1.photo")}</h2>
-        <div className="grid grid-cols-3 gap-2 mb-6">
+        <div className="grid grid-cols-3 gap-2 mb-5">
+          <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => addMedia(e.target.files, "Photo upload")} />
           <input ref={imageInput} type="file" accept="image/*" multiple className="hidden" onChange={e => addMedia(e.target.files, "Photo upload")} />
           <input ref={videoInput} type="file" accept="video/*" multiple className="hidden" onChange={e => addMedia(e.target.files, "Video upload")} />
-          {[
-            { icon: <Camera size={22} />, label: "Take Photo" },
-            { icon: <Upload size={22} />, label: "Upload Photo" },
-            { icon: <Video size={22} />, label: "Upload Video" },
-          ].map(b => (
-            <button key={b.label} onClick={() => b.label === "Upload Video" ? videoInput.current?.click() : imageInput.current?.click()} className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
-              style={{ borderColor: report.evidence === b.label ? "var(--green)" : "var(--border)", background: report.evidence === b.label ? "var(--success-bg)" : "var(--card)", color: "var(--text-muted)" }}>
-              {b.icon}
-              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{b.label}</span>
-            </button>
-          ))}
+          
+          <button
+            type="button"
+            onClick={handleTakePhotoClick}
+            className="py-3.5 px-2 rounded-xl border-2 flex flex-col items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm hover:border-amber-500"
+            style={{
+              borderColor: report.evidence === "Take Photo" || report.evidence === "Photo upload" ? "var(--green)" : "var(--border)",
+              background: "var(--card)",
+            }}
+          >
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "color-mix(in srgb, var(--amber) 18%, transparent)", color: "var(--amber)" }}>
+              <Camera size={20} />
+            </div>
+            <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>Take Photo</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => imageInput.current?.click()}
+            className="py-3.5 px-2 rounded-xl border-2 flex flex-col items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm hover:border-navy"
+            style={{ borderColor: "var(--border)", background: "var(--card)" }}
+          >
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "color-mix(in srgb, var(--navy) 14%, transparent)", color: "var(--navy)" }}>
+              <Upload size={20} />
+            </div>
+            <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>Upload Photo</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => videoInput.current?.click()}
+            className="py-3.5 px-2 rounded-xl border-2 flex flex-col items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm hover:border-purple-500"
+            style={{ borderColor: "var(--border)", background: "var(--card)" }}
+          >
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "color-mix(in srgb, #9333EA 14%, transparent)", color: "#9333EA" }}>
+              <Video size={20} />
+            </div>
+            <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>Upload Video</span>
+          </button>
         </div>
-        {report.files.length > 0 && <div className="grid grid-cols-3 gap-2 mb-6">{report.files.map((file, index) => <div key={`${file.name}-${index}`} className="rounded-xl border p-2 text-center overflow-hidden" style={{ borderColor: "var(--border)" }}>
-          {file.type.startsWith("image/") ? <img src={report.previews[index]} alt={file.name} className="w-full h-16 object-cover rounded-lg" /> : file.type.startsWith("audio/") ? <Mic size={22} className="mx-auto" color="var(--green)" /> : <Video size={22} className="mx-auto" color="var(--navy)" />}
-          <p className="text-[10px] truncate mt-1" style={{ color: "var(--text-muted)" }}>{file.name}</p>
-        </div>)}</div>}
+
+        {/* Attachments Section */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-sm flex items-center gap-2" style={{ color: "var(--text)" }}>
+              <Paperclip size={16} color="var(--green)" />
+              <span>Attachments</span>
+              {report.files.length > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: "var(--success-bg)", color: "var(--green)" }}>
+                  {report.files.length}
+                </span>
+              )}
+            </h3>
+            {report.files.length > 0 && (
+              <span className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
+                {report.files.length} / 10 attached
+              </span>
+            )}
+          </div>
+
+          {report.files.length === 0 ? (
+            <div
+              className="p-6 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center"
+              style={{ borderColor: "var(--border)", background: "var(--card)" }}
+            >
+              <div className="w-11 h-11 rounded-full flex items-center justify-center mb-2" style={{ background: "var(--bg)" }}>
+                <Paperclip size={20} style={{ color: "var(--text-muted)" }} />
+              </div>
+              <p className="text-xs font-semibold mb-0.5" style={{ color: "var(--text)" }}>No attachments added yet</p>
+              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                Voice recordings, photos or videos will appear here
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {report.files.map((file, index) => {
+                const isImage = file.type.startsWith("image/");
+                const isAudio = file.type.startsWith("audio/");
+                const isVideo = file.type.startsWith("video/");
+
+                return (
+                  <div
+                    key={`${file.name}-${index}`}
+                    className="relative aspect-square rounded-2xl border overflow-hidden flex flex-col justify-between group shadow-sm transition-all hover:shadow-md"
+                    style={{ borderColor: "var(--border)", background: "var(--card)" }}
+                  >
+                    {/* Delete button */}
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(index)}
+                      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/65 hover:bg-red-600 text-white flex items-center justify-center transition-colors cursor-pointer shadow-md"
+                      title="Remove attachment"
+                    >
+                      <X size={14} />
+                    </button>
+
+                    {isImage && (
+                      <>
+                        <img
+                          src={report.previews[index]}
+                          alt={file.name}
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-2 text-white flex items-center gap-1.5">
+                          <Camera size={12} className="text-amber-400 shrink-0" />
+                          <span className="text-[10px] font-medium truncate">{file.name}</span>
+                        </div>
+                      </>
+                    )}
+
+                    {isVideo && (
+                      <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center p-3 text-white">
+                        <div className="w-12 h-12 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center mb-1">
+                          <Video size={24} />
+                        </div>
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2 text-white flex items-center gap-1.5">
+                          <Video size={12} className="text-purple-400 shrink-0" />
+                          <span className="text-[10px] font-medium truncate">{file.name}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {isAudio && (
+                      <div className="w-full h-full p-3 flex flex-col justify-between" style={{ background: "var(--success-bg)" }}>
+                        <div className="flex items-center gap-1.5" style={{ color: "var(--green)" }}>
+                          <Mic size={16} />
+                          <span className="text-xs font-bold">Voice Note</span>
+                        </div>
+                        <div className="my-auto py-1 w-full">
+                          <RecordedAudioPlayer file={file} compact />
+                        </div>
+                        <div className="text-[10px] font-medium truncate" style={{ color: "var(--text-muted)" }}>
+                          {file.name}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Live Camera Viewfinder Modal */}
+        <CameraCaptureModal
+          isOpen={isCameraOpen}
+          onClose={() => setIsCameraOpen(false)}
+          onCapture={handleCapturePhoto}
+          onFallbackFileInput={() => cameraInput.current?.click()}
+        />
 
         <Btn onClick={() => onNav("report-step2")} disabled={(!desc.trim() && !recordedAudio) || !selCat || recording.busy} className="w-full py-4 text-base"
           icon={<ArrowRight size={18} />}>
@@ -3278,7 +3468,21 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
                </div>
             </div>
             {report.latitude && report.longitude && (
-              <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Address")} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} height="190px" />
+              <div className="mt-3">
+                <p className="text-xs font-semibold mb-2" style={{ color: "var(--text)" }}>
+                  <Map size={14} className="inline mr-1" /> {t("rep.step2.map_hint")}
+                </p>
+                <LocationPickerMap
+                  latitude={report.latitude}
+                  longitude={report.longitude}
+                  onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Address")}
+                  onUseCurrentLocation={useCurrentLocation}
+                  isLocating={isLocating}
+                  locationError={locationError}
+                  accuracy={locationAccuracy}
+                  className="w-full max-w-2xl aspect-square mx-auto"
+                />
+              </div>
             )}
             {locationError && !report.latitude && (
               <div className="text-red-500 text-xs mt-2">{locationError}</div>
@@ -3292,7 +3496,21 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
               {isLocating ? "Fetching and geocoding your saved profile address..." : (report.latitude && report.longitude ? "Profile address geocoded successfully. You can adjust the pin." : "")}
             </div>
             {report.latitude && report.longitude && (
-              <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Profile")} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} height="190px" />
+              <div className="mt-3">
+                <p className="text-xs font-semibold mb-2" style={{ color: "var(--text)" }}>
+                  <Map size={14} className="inline mr-1" /> {t("rep.step2.map_hint")}
+                </p>
+                <LocationPickerMap
+                  latitude={report.latitude}
+                  longitude={report.longitude}
+                  onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Profile")}
+                  onUseCurrentLocation={useCurrentLocation}
+                  isLocating={isLocating}
+                  locationError={locationError}
+                  accuracy={locationAccuracy}
+                  className="w-full max-w-2xl aspect-square mx-auto"
+                />
+              </div>
             )}
             {locationError && !report.latitude && (
               <div className="text-red-500 text-xs mt-2">{locationError}</div>
@@ -4834,7 +5052,7 @@ function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: stri
   const handleSave = async () => {
     setSaveError("");
     try {
-      if (role === "citizen") await saveCitizenProfile({ name: citizenData.name, phoneNumber: citizenData.phone, gender: citizenData.gender, dateOfBirth: citizenData.dob, houseNumber: citizenData.houseNumber, cityVillage: citizenData.city, pincode: citizenData.pincode, landmark: citizenData.landmark, district: citizenData.district, residentialAddress: `${citizenData.houseNumber}, ${citizenData.landmark}, ${citizenData.city}, ${citizenData.district}, ${citizenData.pincode}` });
+      if (role === "citizen") { if (!citizenData.gender || !citizenData.dob) { setSaveError("Gender and Date of Birth are mandatory."); return; } await saveCitizenProfile({ name: citizenData.name, phoneNumber: citizenData.phone, gender: citizenData.gender, dateOfBirth: citizenData.dob, houseNumber: citizenData.houseNumber, cityVillage: citizenData.city, pincode: citizenData.pincode, landmark: citizenData.landmark, district: citizenData.district, residentialAddress: `${citizenData.houseNumber}, ${citizenData.landmark}, ${citizenData.city}, ${citizenData.district}, ${citizenData.pincode}` }); }
       else if (role === "panchayat") await savePanchayatProfile({ panchayatName: panchayatData.panchayatName, sarpanchName: panchayatData.mukhiyaName, district: panchayatData.district, block: panchayatData.block, villagesCovered: panchayatData.villages, officeAddress: panchayatData.officeAddress, officialPhone: panchayatData.phone });
       else if (role === "localorg" || role === "org-victim") await saveLocalOrgProfile({ organizationName: localOrgData.orgName, spocName: localOrgData.spocName, designation: localOrgData.designation, district: localOrgData.district, block: localOrgData.block, panchayatArea: localOrgData.area, officeAddress: localOrgData.officeAddress, organizationContact: localOrgData.phone });
       else if (role === "university") await saveUniProfile({ universityName: uniData.uniName, spocName: uniData.spocName, spocNumber: uniData.phone, institutionalAddress: uniData.address, domainExpertise: uniData.expertise });
@@ -5005,7 +5223,7 @@ function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: stri
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("profile.gender")}</label>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("profile.gender")} <span style={{ color: "var(--error)" }}>*</span></label>
                   <select
                     disabled={!isEditing}
                     value={citizenData.gender}
@@ -5019,7 +5237,7 @@ function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: stri
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("profile.dob")}</label>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("profile.dob")} <span style={{ color: "var(--error)" }}>*</span></label>
                   <input
                     type="date"
                     disabled={!isEditing}

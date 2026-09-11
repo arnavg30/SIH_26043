@@ -238,8 +238,10 @@ app.put("/api/profile/citizen", verifyToken, async (req, res) => {
       pincode, landmark, district, residentialAddress,
     } = req.body || {};
 
-    if (!clean(name)) return res.status(400).json({ message: "Name is required" });
+        if (!clean(name)) return res.status(400).json({ message: "Name is required" });
     if (!/^\d{10}$/.test(String(phoneNumber || "").replace(/\D/g, ""))) return res.status(400).json({ message: "A valid 10-digit mobile number is required" });
+    if (!clean(gender)) return res.status(400).json({ message: "Gender is required" });
+    if (!dateOfBirth || !String(dateOfBirth).trim()) return res.status(400).json({ message: "Date of birth is required" });
 
     await client.query("BEGIN");
     await client.query(`UPDATE users SET phone_number = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2`, [String(phoneNumber).replace(/\D/g, ""), user.user_id]);
