@@ -12,6 +12,7 @@ export interface LocationPickerMapProps {
   onUseCurrentLocation?: () => void;
   isLocating?: boolean;
   locationError?: string | null;
+  accuracy?: number | null;
   // TODO: Future saved-address integration — once profile teammate makes user address real and persistent,
   // geocoded coordinates from profile can be passed here as initial/saved coordinates.
   initialLatitude?: string | number;
@@ -108,11 +109,12 @@ export default function LocationPickerMap({
   latitude,
   longitude,
   onLocationChange,
-  height = "260px",
+  height,
   className = "",
   onUseCurrentLocation,
   isLocating = false,
   locationError = null,
+  accuracy = null,
 }: LocationPickerMapProps) {
   const hasCoords =
     latitude !== undefined &&
@@ -135,7 +137,7 @@ export default function LocationPickerMap({
   return (
     <div
       className={`relative rounded-xl overflow-hidden border ${className}`}
-      style={{ borderColor: "var(--border)", height }}
+      style={{ borderColor: "var(--border)", ...(height ? { height } : {}) }}
     >
       <MapContainer
         center={mapCenter}
@@ -194,6 +196,9 @@ export default function LocationPickerMap({
             <span className="truncate">
               {currentLat.toFixed(5)}° N, {currentLng.toFixed(5)}° E
             </span>
+            {accuracy !== null && (
+              <span className="text-[10px] text-gray-500 whitespace-nowrap">±{Math.round(accuracy)} m</span>
+            )}
             <span className="text-[10px] text-gray-500 hidden sm:inline">(Drag pin to adjust)</span>
           </div>
         ) : (

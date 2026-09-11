@@ -6,12 +6,14 @@ const { Pool } = require("pg");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 
-const oci = require("oci-sdk");
 const fs = require("fs");
+const path = require("path");
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+const localUploadDir = path.join(__dirname, "uploads");
+app.use("/uploads", express.static(localUploadDir));
 
 // ---------------- Firebase Admin ----------------
 if (!getApps().length) {
@@ -55,6 +57,13 @@ async function uploadToOCI(file, objectName) {
   });
 
   return objectName;
+}
+
+async function saveMediaLocally(file, objectName) {
+  const safeName = objectName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  await fs.promises.mkdir(localUploadDir, { recursive: true });
+  await fs.promises.writeFile(path.join(localUploadDir, safeName), file.buffer);
+  return { storagePath: safeName, fileUrl: `/uploads/${safeName}` };
 }
 
 // ---------------- PostgreSQL ----------------
@@ -620,7 +629,7 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
         beneficiary_name, beneficiary_phone, is_anonymous, severity)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING *`,
-      [code, user.user_id, categoryId, clean(title), clean(description),
+       [code, user.user_id, cat.rows[0].category_id, clean(title), clean(description),
  latitude === "" ? null : latitude,
  longitude === "" ? null : longitude,
        clean(district), clean(block), clean(panchayatWard) || null, clean(landmark) || null, clean(siteAddress),
@@ -628,12 +637,20 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
     );
     const mediaWarnings = [];
     for (const file of mediaFiles) {
+      const objectName = `${user.user_id}/${result.rows[0].problem_id}/${Date.now()}-${file.originalname}`;
+      let fileUrl = objectName;
+      let storagePath = objectName;
       try {
-   const objectName = `${user.user_id}/${result.rows[0].problem_id}/${Date.now()}-${file.originalname}`;
+        await uploadToOCI(file, objectName);
+      } catch (mediaError) {
+        console.error("OCI media upload failed; using local fallback:", mediaError.message);
+        const localMedia = await saveMediaLocally(file, objectName);
+        fileUrl = localMedia.fileUrl;
+        storagePath = localMedia.storagePath;
+        mediaWarnings.push({ fileName: file.originalname, message: "Stored locally because OCI is unavailable" });
+      }
 
-  await uploadToOCI(file, objectName);
-
-  await client.query(
+      await client.query(
     `INSERT INTO problem_media
       (problem_id, media_type, file_url, storage_path, file_name, mime_type, file_size)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -644,20 +661,13 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
         : file.mimetype.startsWith("video/")
         ? "VIDEO"
         : "DOCUMENT",
-      objectName,
-      objectName,
+       fileUrl,
+       storagePath,
       file.originalname,
       file.mimetype,
       file.size,
     ]
-  );
-      } catch (mediaError) {
-        // A storage misconfiguration must not discard an otherwise valid
-        // community report. The UI still retains a local preview and the API
-        // tells the caller that the attachment needs a retry.
-        console.error("OCI media upload failed:", mediaError.message);
-        mediaWarnings.push({ fileName: file.originalname, message: mediaError.message });
-      }
+      );
 }
     res.status(201).json({
   problem: result.rows[0],

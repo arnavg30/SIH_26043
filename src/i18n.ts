@@ -306,9 +306,14 @@ const T: Translations = {
   "mitra.profile.dob": { en: "Select your date of birth.", hi: "अपनी जन्म तिथि चुनें।", sa: "Apan janam mahina-bochor chunao." },
   "mitra.profile.address": { en: "Enter your address.", hi: "अब अपना पता भरें।", sa: "Nit apan thikana likhao." },
   "mitra.dash.greeting": {
-    en: "Namaste Ram ji! How may I assist you today?",
-    hi: "नमस्ते Ram ji! आज मैं आपकी क्या मदद करूँ?",
-    sa: "Johar Ram ji! Tehing in apeya chet madad in daariya?",
+    en: "Namaste {name} ji! How may I assist you today?",
+    hi: "नमस्ते {name} जी! आज मैं आपकी क्या मदद करूँ?",
+    sa: "Johar {name} ji! Tehing in apeya chet madad in daariya?",
+  },
+  "mitra.dash.greeting.generic": {
+    en: "Namaste! How may I assist you today?",
+    hi: "नमस्ते! आज मैं आपकी क्या मदद करूँ?",
+    sa: "Johar! Tehing in apeya chet madad in daariya?",
   },
   "mitra.dash.hint": {
     en: "Tap the button below to report your problem.",
