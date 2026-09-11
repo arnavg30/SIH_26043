@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
 import {
   Sun, Moon, Globe, ChevronRight, MapPin, Mic, MicOff, Keyboard,
   Camera, Upload, Video, Bell, User, Users, Building2, GraduationCap,
@@ -13,18 +13,12 @@ import {
 import { type Lang, LANG_NAMES, makeT } from "./i18n";
 import { NavJharLogo } from "./components/NavJharLogo";
 import { MitraAssistant } from "./components/MitraAssistant";
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendEmailVerification,
-  reload,
-  signOut
-} from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, reload, signOut } from "firebase/auth";
 import { auth } from "./firebase/config";
 import {
   syncAuth, getProfileMe,
   saveCitizenProfile, savePanchayatProfile, saveLocalOrgProfile,
-  saveOrgProfile, saveIndustryProfile, saveUniProfile
+  saveOrgProfile, saveIndustryProfile, saveUniProfile, submitProblem
 } from "./api";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -36,12 +30,35 @@ interface AppCtx {
   t: (key: string) => string;
   role: string;
   setRole: (r: string) => void;
+  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string };
+  setReport: React.Dispatch<React.SetStateAction<AppCtx["report"]>>;
 }
 const Ctx = createContext<AppCtx>({
   lang: "en", setLang: () => {}, dark: false, setDark: () => {}, t: (k) => k,
   role: "citizen", setRole: () => {},
+  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" }, setReport: () => {},
 });
 const useApp = () => useContext(Ctx);
+const isValidMobile = (value: string) => /^\d{10}$/.test(value.replace(/\D/g, ""));
+
+type ProfileDisplay = { name: string; detail: string };
+function useProfileDisplay(role: string): ProfileDisplay {
+  const [display, setDisplay] = useState<ProfileDisplay>({ name: "", detail: "" });
+  useEffect(() => {
+    let active = true;
+    getProfileMe().then(({ profile }) => {
+      if (!active || !profile) return;
+      if (role === "citizen") setDisplay({ name: profile.name || "", detail: [profile.city_village, profile.district].filter(Boolean).join(", ") });
+      else if (role === "panchayat") setDisplay({ name: profile.panchayat_name || "", detail: [profile.block, profile.district].filter(Boolean).join(", ") });
+      else if (role === "localorg" || role === "org-victim") setDisplay({ name: profile.organization_name || "", detail: [profile.block, profile.district].filter(Boolean).join(", ") });
+      else if (role === "university") setDisplay({ name: profile.university_name || "", detail: profile.institutional_address || "" });
+      else if (role === "industry") setDisplay({ name: profile.industry_name || "", detail: profile.industry_type || "" });
+      else if (role === "org-solver" || role === "org") setDisplay({ name: profile.organization_name || "", detail: profile.domain_expertise || profile.domain || "" });
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [role]);
+  return display;
+}
 
 function getHomeDashboard(role: string): Screen {
   if (role === "panchayat") return "panchayat-dashboard";
@@ -870,82 +887,38 @@ function EmailPasswordAuthForm({
   );
 }
 
-function EmailVerificationGate({
-  email, onVerified, onBack,
-}: {
-  email: string;
-  onVerified: () => Promise<void>;
-  onBack: () => void;
-}) {
+function EmailVerificationGate({ email, onVerified, onBack }: { email: string; onVerified: () => Promise<void>; onBack: () => void }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-
   const checkVerification = async () => {
     const user = auth.currentUser;
-    if (!user) {
-      setErrorMsg("Your session has expired. Please sign in again.");
-      return;
-    }
-    setLoading(true);
-    setErrorMsg("");
+    if (!user) return setErrorMsg("Your session expired. Please sign in again.");
+    setLoading(true); setErrorMsg("");
     try {
       await reload(user);
-      if (!auth.currentUser?.emailVerified) {
-        setErrorMsg("This email is not verified yet. Open the verification link in your inbox, then try again.");
-        return;
-      }
+      if (!auth.currentUser?.emailVerified) return setErrorMsg("Email is not verified yet. Open the link from your inbox, then try again.");
       await onVerified();
-    } catch (err: any) {
-      setErrorMsg(err.message || "We could not check your verification status. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { setErrorMsg(err.message || "Could not check verification status."); }
+    finally { setLoading(false); }
   };
-
-  const resendVerification = async () => {
+  const resend = async () => {
     const user = auth.currentUser;
-    if (!user) {
-      setErrorMsg("Your session has expired. Please sign in again.");
-      return;
-    }
-    setLoading(true);
-    setErrorMsg("");
-    setMessage("");
-    try {
-      await sendEmailVerification(user);
-      setMessage(`A fresh verification link has been sent to ${email}.`);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Unable to resend the verification email right now.");
-    } finally {
-      setLoading(false);
-    }
+    if (!user) return setErrorMsg("Your session expired. Please sign in again.");
+    setLoading(true); setErrorMsg(""); setMessage("");
+    try { await sendEmailVerification(user); setMessage(`Verification link sent to ${email}.`); }
+    catch (err: any) { setErrorMsg(err.message || "Could not resend verification email."); }
+    finally { setLoading(false); }
   };
-
-  return (
-    <div className="space-y-4 text-center">
-      <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center" style={{ background: "var(--success-bg)" }}>
-        <Mail size={22} color="var(--success)" />
-      </div>
-      <div>
-        <h2 className="font-bold text-base" style={{ color: "var(--text)" }}>Verify your email</h2>
-        <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-          We sent a verification link to <strong style={{ color: "var(--text)" }}>{email}</strong>. Open it, then return here to continue.
-        </p>
-      </div>
-      {message && <p className="p-2.5 rounded-xl text-xs" style={{ background: "var(--success-bg)", color: "var(--success)" }}>{message}</p>}
-      {errorMsg && <p className="p-2.5 rounded-xl text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>{errorMsg}</p>}
-      <Btn onClick={checkVerification} disabled={loading} className="w-full py-3" icon={loading ? <Loader size={16} className="animate-spin" /> : <CheckCircle size={16} />}>
-        {loading ? "Checking..." : "I verified my email — Continue"}
-      </Btn>
-      <button type="button" onClick={resendVerification} disabled={loading} className="w-full text-xs font-semibold underline cursor-pointer disabled:opacity-50" style={{ color: "var(--navy)" }}>
-        Resend verification email
-      </button>
-      <button type="button" onClick={onBack} disabled={loading} className="w-full text-xs cursor-pointer" style={{ color: "var(--text-muted)" }}>
-        Use a different email
-      </button>
-    </div>
-  );
+  return <div className="space-y-4 text-center">
+    <div className="w-12 h-12 mx-auto rounded-full flex items-center justify-center" style={{ background: "var(--success-bg)" }}><Mail size={22} color="var(--success)" /></div>
+    <div><h2 className="font-bold text-base" style={{ color: "var(--text)" }}>Verify your email</h2><p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>We sent a verification link to <strong>{email}</strong>. Open it, then return here.</p></div>
+    {message && <p className="p-2.5 rounded-xl text-xs" style={{ background: "var(--success-bg)", color: "var(--success)" }}>{message}</p>}
+    {errorMsg && <p className="p-2.5 rounded-xl text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>{errorMsg}</p>}
+    <Btn onClick={checkVerification} disabled={loading} className="w-full py-3" icon={loading ? <Loader size={16} className="animate-spin" /> : <CheckCircle size={16} />}>{loading ? "Checking..." : "I verified my email — Continue"}</Btn>
+    <button type="button" onClick={resend} disabled={loading} className="w-full text-xs font-semibold underline cursor-pointer" style={{ color: "var(--navy)" }}>Resend verification email</button>
+    <button type="button" onClick={onBack} disabled={loading} className="w-full text-xs cursor-pointer" style={{ color: "var(--text-muted)" }}>Use a different email</button>
+  </div>;
 }
 
 // ─── GENERIC EMAIL LOGIN & PROFILE SETUP ──────────────────────────────────────
@@ -1005,18 +978,9 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
   };
 
   const finishVerifiedAuthentication = async () => {
-    const profileTypeUpper = profileType === "panchayat" ? "PANCHAYAT" :
-      profileType === "localorg" ? "LOCAL_ORG" : "CITIZEN";
+    const profileTypeUpper = profileType === "panchayat" ? "PANCHAYAT" : profileType === "localorg" ? "LOCAL_ORG" : "CITIZEN";
     await syncAuth(profileTypeUpper, lang);
-    try {
-      const pRes = await getProfileMe();
-      if (pRes && pRes.profile) {
-        onSuccess();
-        return;
-      }
-    } catch {
-      // Profile does not exist yet; continue to profile setup.
-    }
+    try { const pRes = await getProfileMe(); if (pRes?.profile) return onSuccess(); } catch { /* New profile. */ }
     setStep("profile");
   };
 
@@ -1039,7 +1003,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
       const user = auth.currentUser;
-      if (!user) throw new Error("Could not find the signed-in Firebase user.");
+      if (!user) throw new Error("Firebase user is unavailable.");
       if (!user.emailVerified) {
         if (authMode === "signup") await sendEmailVerification(user);
         setStep("verify");
@@ -1070,8 +1034,8 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
     setErrorMsg("");
     try {
       if (profileType === "panchayat") {
-        if (!panchName.trim() || !sarpanchName.trim() || !panchAddress.trim()) {
-          setErrorMsg("Please fill in all required fields marked with *");
+        if (!panchName.trim() || !sarpanchName.trim() || !panchAddress.trim() || !isValidMobile(panchPhone)) {
+          setErrorMsg("Fill all required fields and enter a valid 10-digit mobile number.");
           setLoading(false);
           return;
         }
@@ -1085,8 +1049,8 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
           officialPhone: panchPhone,
         });
       } else if (profileType === "localorg") {
-        if (!orgName.trim() || !spocName.trim() || !orgAddress.trim()) {
-          setErrorMsg("Please fill in all required fields marked with *");
+        if (!orgName.trim() || !spocName.trim() || !orgAddress.trim() || !isValidMobile(orgPhone)) {
+          setErrorMsg("Fill all required fields and enter a valid 10-digit mobile number.");
           setLoading(false);
           return;
         }
@@ -1102,13 +1066,14 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
         });
       } else {
         // Citizen
-        if (!citName.trim()) {
-          setErrorMsg("Name is required");
+        if (!citName.trim() || !citCity.trim() || !citPincode.trim() || !citDistrict.trim() || !isValidMobile(citPhone)) {
+          setErrorMsg("Fill all required fields and enter a valid 10-digit mobile number.");
           setLoading(false);
           return;
         }
         await saveCitizenProfile({
           name: citName,
+          phoneNumber: citPhone,
           gender: citGender,
           dateOfBirth: citDob || undefined,
           houseNumber: citHouse,
@@ -1170,13 +1135,15 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
           </div>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-              <Phone size={12} className="inline mr-1" /> Official Phone Number
+              <Phone size={12} className="inline mr-1" /> Official Phone Number <span style={{ color: "var(--error)" }}>*</span>
             </label>
             <div className="flex gap-2">
               <div className="px-3 py-2.5 rounded-xl text-sm font-medium border"
                 style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
               <input
                 type="tel"
+                required
+                pattern="[0-9]{10}"
                 value={panchPhone}
                 onChange={e => setPanchPhone(e.target.value)}
                 placeholder="98765 43210"
@@ -1294,13 +1261,15 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
           </div>
           <div className="mb-3">
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-              <Phone size={12} className="inline mr-1" /> Contact Phone Number
+              <Phone size={12} className="inline mr-1" /> Contact Phone Number <span style={{ color: "var(--error)" }}>*</span>
             </label>
             <div className="flex gap-2">
               <div className="px-3 py-2.5 rounded-xl text-sm font-medium border"
                 style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
               <input
                 type="tel"
+                required
+                pattern="[0-9]{10}"
                 value={orgPhone}
                 onChange={e => setOrgPhone(e.target.value)}
                 placeholder="98765 43210"
@@ -1395,13 +1364,15 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
         </div>
         <div className="mb-3">
           <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-            <Phone size={12} className="inline mr-1" /> {t("auth.mobile")}
+            <Phone size={12} className="inline mr-1" /> {t("auth.mobile")} <span style={{ color: "var(--error)" }}>*</span>
           </label>
           <div className="flex gap-2">
             <div className="px-3 py-2.5 rounded-xl text-sm font-medium border"
               style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
             <input
               type="tel"
+              required
+              pattern="[0-9]{10}"
               value={citPhone}
               onChange={e => setCitPhone(e.target.value)}
               placeholder="98765 43210"
@@ -1444,7 +1415,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
         </div>
         <div className="mb-3">
           <p className="text-xs font-semibold mb-2 flex items-center gap-1" style={{ color: "var(--text)" }}>
-            <MapPin size={12} /> {t("profile.address")}
+            <MapPin size={12} /> {t("profile.address")} <span style={{ color: "var(--error)" }}>*</span>
           </p>
           <div className="space-y-2 pl-2 border-l-2" style={{ borderColor: "var(--border)" }}>
             <div className="relative">
@@ -1459,6 +1430,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
             </div>
             <div className="grid grid-cols-2 gap-2">
               <input
+                required
                 value={citCity}
                 onChange={e => setCitCity(e.target.value)}
                 onFocus={() => setActiveField("address")}
@@ -1467,6 +1439,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
                 style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
               />
               <input
+                required
                 value={citDistrict}
                 onChange={e => setCitDistrict(e.target.value)}
                 onFocus={() => setActiveField("address")}
@@ -1477,6 +1450,7 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
             </div>
             <div className="grid grid-cols-2 gap-2">
               <input
+                required
                 value={citPincode}
                 onChange={e => setCitPincode(e.target.value)}
                 onFocus={() => setActiveField("address")}
@@ -1532,7 +1506,6 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
         />
       )}
       {step === "verify" && <EmailVerificationGate email={email} onVerified={finishVerifiedAuthentication} onBack={() => setStep("email")} />}
-      {/* Call the local renderer directly so typing does not remount inputs. */}
       {step === "profile" && ProfileForm()}
     </Card>
   );
@@ -1627,6 +1600,7 @@ function OrgVictimLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── CITIZEN DASHBOARD ────────────────────────────────────────────────────────
 function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const profile = useProfileDisplay("citizen");
   const statuses = [
     { icon: <SendHorizontal size={20} />, val: "3", key: "cit.submitted", color: "#1D4ED8" },
     { icon: <Clock size={20} />, val: "2", key: "cit.underreview", color: "var(--warning)" },
@@ -1641,9 +1615,9 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-xs" style={{ color: "rgba(255,255,255,0.55)" }}>{t("cit.namaste")}</p>
-            <h1 className="text-xl font-black text-white">Ram Kumar Ji</h1>
+            <h1 className="text-xl font-black text-white">{profile.name ? `${profile.name} Ji` : "Welcome"}</h1>
             <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Bakri Bazar, Kanke, Ranchi
+              {profile.detail || "Your verified profile"}
             </p>
           </div>
           <button onClick={() => onNav("notifications")}
@@ -1746,6 +1720,7 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── PANCHAYAT DASHBOARD ──────────────────────────────────────────────────────
 function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const profile = useProfileDisplay("panchayat");
   const statuses = [
     { label: "Total Problems", val: "34", color: "var(--navy)", icon: <Layers size={18} /> },
     { label: "Under Review", val: "8", color: "var(--warning)", icon: <Clock size={18} /> },
@@ -1761,9 +1736,9 @@ function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-xs" style={{ color: "rgba(255,255,255,0.55)" }}>Mukhiya / Sarpanch</p>
-            <h1 className="text-xl font-black text-white">Piska Nagri Panchayat</h1>
+            <h1 className="text-xl font-black text-white">{profile.name || "Panchayat Dashboard"}</h1>
             <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Kanke Block, Ranchi
+              {profile.detail || "Your verified profile"}
             </p>
           </div>
           <button onClick={() => onNav("notifications")}
@@ -1838,6 +1813,7 @@ function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 function OrgVictimDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const profile = useProfileDisplay("localorg");
   const statuses = [
     { label: "Total Reported", val: "12", color: "var(--navy)", icon: <FileText size={18} /> },
     { label: "Pending Review", val: "2", color: "var(--warning)", icon: <Clock size={18} /> },
@@ -1853,9 +1829,9 @@ function OrgVictimDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-xs" style={{ color: "rgba(255,255,255,0.55)" }}>Local Organisation (RWA)</p>
-            <h1 className="text-xl font-black text-white">Kanke Jan Sewa Samiti</h1>
+            <h1 className="text-xl font-black text-white">{profile.name || "Organisation Dashboard"}</h1>
             <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Kanke Block, Ranchi
+              {profile.detail || "Your verified profile"}
             </p>
           </div>
           <button onClick={() => onNav("notifications")}
@@ -1948,18 +1924,9 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
   const finishVerifiedAuthentication = async () => {
     await syncAuth("ORGANIZATION", lang);
-    try {
-      const pRes = await getProfileMe();
-      if (pRes && pRes.profile) {
-        onNav("org-solver-dashboard");
-        return;
-      }
-    } catch {
-      // Profile does not exist yet; continue to profile setup.
-    }
+    try { const pRes = await getProfileMe(); if (pRes?.profile) return onNav("org-solver-dashboard"); } catch { /* New profile. */ }
     setStep("profile");
   };
-
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
@@ -1979,12 +1946,8 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
       const user = auth.currentUser;
-      if (!user) throw new Error("Could not find the signed-in Firebase user.");
-      if (!user.emailVerified) {
-        if (authMode === "signup") await sendEmailVerification(user);
-        setStep("verify");
-        return;
-      }
+      if (!user) throw new Error("Firebase user is unavailable.");
+      if (!user.emailVerified) { if (authMode === "signup") await sendEmailVerification(user); setStep("verify"); return; }
       await finishVerifiedAuthentication();
     } catch (err: any) {
       console.error("OrgSolver Auth Error:", err);
@@ -2006,8 +1969,8 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!orgName.trim() || !spocName.trim() || !address.trim()) {
-      setErrorMsg("Please fill in all required fields marked with *");
+    if (!orgName.trim() || !spocName.trim() || !address.trim() || !isValidMobile(spocPhone)) {
+      setErrorMsg("Fill all required fields and enter a valid 10-digit mobile number.");
       return;
     }
     setLoading(true);
@@ -2082,7 +2045,6 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
                 emailHint="Enter your registered NGO / non-profit / organisation email address."
               />
             )}
-
             {step === "verify" && <EmailVerificationGate email={email} onVerified={finishVerifiedAuthentication} onBack={() => setStep("email")} />}
 
             {step === "profile" && (
@@ -2132,13 +2094,15 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>
-                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number
+                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number <span style={{ color: "var(--error)" }}>*</span>
                   </label>
                   <div className="flex gap-2">
                     <div className="px-3 py-2 rounded-xl text-sm font-medium border"
                       style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
                     <input
                       type="tel"
+                      required
+                      pattern="[0-9]{10}"
                       value={spocPhone}
                       onChange={e => setSpocPhone(e.target.value)}
                       placeholder="98765 43210"
@@ -2189,12 +2153,13 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── ORG SOLVER DASHBOARD ─────────────────────────────────────────────────────
 function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const profile = useProfileDisplay("org-solver");
   return (
     <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
       <NavBar role="org-solver" screen="org-solver-dashboard" onNav={onNav} />
       <div className="px-4 pt-5 pb-4" style={{ background: "var(--nav-bg)" }}>
         <h1 className="text-xl font-black text-white">{t("org.dashboard")}</h1>
-        <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>Ranchi Development Trust - {t("org.subtitle")}</p>
+        <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>{profile.name || "Organisation"} {profile.detail ? `- ${profile.detail}` : `- ${t("org.subtitle")}`}</p>
       </div>
       <div className="max-w-3xl mx-auto px-4 py-5 space-y-4">
         {/* KPI Cards */}
@@ -2297,18 +2262,9 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
   const finishVerifiedAuthentication = async () => {
     await syncAuth("UNIVERSITY", lang);
-    try {
-      const pRes = await getProfileMe();
-      if (pRes && pRes.profile) {
-        onNav("uni-dashboard");
-        return;
-      }
-    } catch {
-      // Profile does not exist yet; continue to profile setup.
-    }
+    try { const pRes = await getProfileMe(); if (pRes?.profile) return onNav("uni-dashboard"); } catch { /* New profile. */ }
     setStep("profile");
   };
-
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
@@ -2328,12 +2284,8 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
       const user = auth.currentUser;
-      if (!user) throw new Error("Could not find the signed-in Firebase user.");
-      if (!user.emailVerified) {
-        if (authMode === "signup") await sendEmailVerification(user);
-        setStep("verify");
-        return;
-      }
+      if (!user) throw new Error("Firebase user is unavailable.");
+      if (!user.emailVerified) { if (authMode === "signup") await sendEmailVerification(user); setStep("verify"); return; }
       await finishVerifiedAuthentication();
     } catch (err: any) {
       console.error("Uni Auth Error:", err);
@@ -2355,8 +2307,8 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uniName.trim() || !spocName.trim() || !uniAddress.trim()) {
-      setErrorMsg("Please fill in all required fields marked with *");
+    if (!uniName.trim() || !spocName.trim() || !uniAddress.trim() || !isValidMobile(spocPhone)) {
+      setErrorMsg("Fill all required fields and enter a valid 10-digit mobile number.");
       return;
     }
     setLoading(true);
@@ -2487,13 +2439,15 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number
+                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number <span style={{ color: "var(--error)" }}>*</span>
                   </label>
                   <div className="flex gap-2">
                     <div className="px-3 py-2 rounded-xl text-sm font-medium border"
                       style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
                     <input
                       type="tel"
+                      required
+                      pattern="[0-9]{10}"
                       value={spocPhone}
                       onChange={e => setSpocPhone(e.target.value)}
                       placeholder="98765 43210"
@@ -2566,18 +2520,9 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
   const finishVerifiedAuthentication = async () => {
     await syncAuth("INDUSTRY", lang);
-    try {
-      const pRes = await getProfileMe();
-      if (pRes && pRes.profile) {
-        onNav("industry-dashboard");
-        return;
-      }
-    } catch {
-      // Profile does not exist yet; continue to profile setup.
-    }
+    try { const pRes = await getProfileMe(); if (pRes?.profile) return onNav("industry-dashboard"); } catch { /* New profile. */ }
     setStep("profile");
   };
-
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
@@ -2597,12 +2542,8 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
       const user = auth.currentUser;
-      if (!user) throw new Error("Could not find the signed-in Firebase user.");
-      if (!user.emailVerified) {
-        if (authMode === "signup") await sendEmailVerification(user);
-        setStep("verify");
-        return;
-      }
+      if (!user) throw new Error("Firebase user is unavailable.");
+      if (!user.emailVerified) { if (authMode === "signup") await sendEmailVerification(user); setStep("verify"); return; }
       await finishVerifiedAuthentication();
     } catch (err: any) {
       console.error("Industry Auth Error:", err);
@@ -2624,8 +2565,8 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!indName.trim() || !spocName.trim() || !indAddress.trim()) {
-      setErrorMsg("Please fill in all required fields marked with *");
+    if (!indName.trim() || !spocName.trim() || !indAddress.trim() || !isValidMobile(spocPhone)) {
+      setErrorMsg("Fill all required fields and enter a valid 10-digit mobile number.");
       return;
     }
     setLoading(true);
@@ -2756,13 +2697,15 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
                 <div>
                   <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number
+                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number <span style={{ color: "var(--error)" }}>*</span>
                   </label>
                   <div className="flex gap-2">
                     <div className="px-3 py-2 rounded-xl text-sm font-medium border"
                       style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
                     <input
                       type="tel"
+                      required
+                      pattern="[0-9]{10}"
                       value={spocPhone}
                       onChange={e => setSpocPhone(e.target.value)}
                       placeholder="98765 43210"
@@ -2835,10 +2778,20 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── REPORT STEP 1 ────────────────────────────────────────────────────────────
 function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
-  const [desc, setDesc] = useState("");
+  const { report, setReport } = useApp();
+  const desc = report.description;
+  const setDesc = (description: string) => setReport(current => ({ ...current, description }));
   const [mode, setMode] = useState<"none" | "voice" | "text">("none");
-  const [selCat, setSelCat] = useState<string | null>(null);
+  const selCat = report.category || null;
+  const setSelCat = (category: string | null) => setReport(current => ({ ...current, category: category || "", categoryId: category ? String(cats.findIndex(item => item.label === category) + 1) : "" }));
   const [listening, setListening] = useState(false);
+  const imageInput = useRef<HTMLInputElement>(null);
+  const videoInput = useRef<HTMLInputElement>(null);
+  const addMedia = (files: FileList | null, evidence: string) => {
+    if (!files?.length) return;
+    const selected = Array.from(files);
+    setReport(current => ({ ...current, evidence, files: [...current.files, ...selected].slice(0, 10), previews: [...current.previews, ...selected.map(file => URL.createObjectURL(file))].slice(0, 10) }));
+  };
 
   const cats = [
     { icon: <Wheat size={18} />, label: "Agriculture" },
@@ -2986,20 +2939,26 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
 
         <h2 className="font-semibold text-sm mb-3" style={{ color: "var(--text)" }}>{t("rep.step1.photo")}</h2>
         <div className="grid grid-cols-3 gap-2 mb-6">
+          <input ref={imageInput} type="file" accept="image/*" multiple className="hidden" onChange={e => addMedia(e.target.files, "Photo upload")} />
+          <input ref={videoInput} type="file" accept="video/*" multiple className="hidden" onChange={e => addMedia(e.target.files, "Video upload")} />
           {[
             { icon: <Camera size={22} />, label: "Take Photo" },
             { icon: <Upload size={22} />, label: "Upload Photo" },
             { icon: <Video size={22} />, label: "Upload Video" },
           ].map(b => (
-            <button key={b.label} className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
-              style={{ borderColor: "var(--border)", background: "var(--card)", color: "var(--text-muted)" }}>
+            <button key={b.label} onClick={() => b.label === "Upload Video" ? videoInput.current?.click() : imageInput.current?.click()} className="py-4 rounded-xl border-2 flex flex-col items-center gap-1.5"
+              style={{ borderColor: report.evidence === b.label ? "var(--green)" : "var(--border)", background: report.evidence === b.label ? "var(--success-bg)" : "var(--card)", color: "var(--text-muted)" }}>
               {b.icon}
               <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>{b.label}</span>
             </button>
           ))}
         </div>
+        {report.files.length > 0 && <div className="grid grid-cols-3 gap-2 mb-6">{report.files.map((file, index) => <div key={`${file.name}-${index}`} className="rounded-xl border p-2 text-center overflow-hidden" style={{ borderColor: "var(--border)" }}>
+          {file.type.startsWith("image/") ? <img src={report.previews[index]} alt={file.name} className="w-full h-16 object-cover rounded-lg" /> : <Video size={22} className="mx-auto" color="var(--navy)" />}
+          <p className="text-[10px] truncate mt-1" style={{ color: "var(--text-muted)" }}>{file.name}</p>
+        </div>)}</div>}
 
-        <Btn onClick={() => onNav("report-step2")} className="w-full py-4 text-base"
+        <Btn onClick={() => onNav("report-step2")} disabled={!desc.trim() || !selCat} className="w-full py-4 text-base"
           icon={<ArrowRight size={18} />}>
           {t("rep.step1.next")}
         </Btn>
@@ -3011,6 +2970,7 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── REPORT STEP 2 ────────────────────────────────────────────────────────────
 function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
+  const { report, setReport } = useApp();
   const [method, setMethod] = useState<"none" | "gps" | "map" | "manual">("none");
   const [dist, setDist] = useState("");
   const [block, setBlock] = useState("");
@@ -3065,7 +3025,7 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
             { method: "map" as const, icon: <Map size={24} />, label: t("rep.step2.map"), color: "var(--navy)" },
             { method: "manual" as const, icon: <Building2 size={24} />, label: t("rep.step2.manual"), color: "#7C3AED" },
           ].map(opt => (
-            <button key={opt.method} onClick={() => setMethod(opt.method)}
+            <button key={opt.method} onClick={() => { setMethod(opt.method); setReport(current => opt.method === "gps" ? { ...current, locationMethod: "GPS", district: "Ranchi", block: "Kanke", panchayat: "Piska Nagri", village: "Bakri Bazar" } : { ...current, locationMethod: opt.method }); }}
               className="w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all active:scale-95"
               style={{
                 borderColor: method === opt.method ? opt.color : "var(--border)",
@@ -3144,7 +3104,7 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
             ].map(f => (
               <div key={f.key} className="mb-3">
                 <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>{t(f.key)}</label>
-                <select className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
+                <select value={f.key === "loc.district" ? report.district : f.key === "loc.block" ? report.block : f.key === "loc.panchayat" ? report.panchayat : report.village} onChange={e => setReport(current => ({ ...current, [f.key === "loc.district" ? "district" : f.key === "loc.block" ? "block" : f.key === "loc.panchayat" ? "panchayat" : "village"]: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none"
                   style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}>
                   <option value="">Select…</option>
                   {f.opts.map(o => <option key={o}>{o}</option>)}
@@ -3155,7 +3115,7 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
         )}
 
         {method !== "none" && (
-          <Btn onClick={() => onNav("report-step3")} className="w-full py-4 text-base"
+          <Btn onClick={() => onNav("report-step3")} disabled={method === "manual" && (!report.district || !report.block || !report.panchayat || !report.village)} className="w-full py-4 text-base"
             icon={<ArrowRight size={18} />}>
             {t("rep.step2.confirm")}
           </Btn>
@@ -3168,6 +3128,7 @@ function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── REPORT STEP 3 ────────────────────────────────────────────────────────────
 function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
+  const { report } = useApp();
   const StepDots = () => (
     <div className="flex items-center gap-1">
       {[1, 2, 3].map(s => (
@@ -3219,7 +3180,7 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
                 <MessageSquare size={11} /> {t("rep.step3.desc_label")}
               </p>
               <p className="text-sm" style={{ color: "var(--text)" }}>
-                "Hamare gaon ka handpump 2 haftton se kharab hai."
+                {report.description}
               </p>
             </div>
             <div className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
@@ -3227,17 +3188,17 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
                 <MapPin size={11} /> {t("rep.step3.loc_label")}
               </p>
               <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                Bakri Bazar, Kanke Block, Ranchi
+                {[report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Map location selected"}
               </p>
             </div>
             <div className="flex gap-3">
               <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--success-bg)" }}>
                 <Droplets size={16} color="var(--green)" className="mx-auto mb-1" />
-                <p className="text-xs font-bold" style={{ color: "var(--green)" }}>Water</p>
+                <p className="text-xs font-bold" style={{ color: "var(--green)" }}>{report.category}</p>
               </div>
               <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--warning-bg)" }}>
                 <Camera size={16} color="var(--warning)" className="mx-auto mb-1" />
-                <p className="text-xs font-bold" style={{ color: "var(--warning)" }}>1 Photo</p>
+                <p className="text-xs font-bold" style={{ color: "var(--warning)" }}>{report.evidence || "No evidence added"}</p>
               </div>
             </div>
           </div>
@@ -3324,6 +3285,29 @@ function AIProcessingScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── AI RESULT ────────────────────────────────────────────────────────────────
 function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const { report, setReport } = useApp();
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const submitReport = async () => {
+    setSubmitting(true); setSubmitError("");
+    try {
+      const data = new FormData();
+      data.append("categoryId", report.categoryId);
+      data.append("categoryName", report.category);
+      data.append("title", report.description.trim().slice(0, 100));
+      data.append("description", report.description);
+      data.append("district", report.district || "Ranchi");
+      data.append("block", report.block || "Kanke");
+      data.append("panchayatWard", report.panchayat);
+      data.append("landmark", report.village);
+      data.append("siteAddress", [report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Map-selected location");
+      report.files.forEach(file => data.append("media", file));
+      const result = await submitProblem(data);
+      setReport(current => ({ ...current, problemCode: result.problem.problem_code }));
+      onNav("submit-success");
+    } catch (err: any) { setSubmitError(err.message || "Could not submit the report. Please try again."); }
+    finally { setSubmitting(false); }
+  };
   return (
     <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
       <div className="px-4 py-5" style={{ background: "var(--nav-bg)" }}>
@@ -3342,7 +3326,7 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
           </h3>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { icon: <Droplets size={18} color="var(--navy)" />, label: t("ai.category"), val: "Water Management", conf: "94%" },
+              { icon: <Layers size={18} color="var(--navy)" />, label: t("ai.category"), val: report.category || "Other", conf: "Selected by you" },
               { icon: <AlertTriangle size={18} color="var(--error)" />, label: t("ai.priority"), val: "HIGH", conf: "87/100" },
               { icon: <RefreshCw size={18} color="var(--warning)" />, label: t("ai.duplicate"), val: "4 Found", conf: "89% similar" },
             ].map(r => (
@@ -3362,7 +3346,7 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
           </h3>
           <div className="space-y-2">
             {[
-              ["Domain", "Water / Agriculture"],
+              ["Domain", report.category || "Other"],
               ["Severity", "High — 3+ weeks unresolved"],
               
               ["Required Skills", "Civil + Water Mgmt + IoT"],
@@ -3387,15 +3371,16 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
         </div>
 
         <div className="flex gap-3">
-          <Btn onClick={() => onNav("submit-success")} className="flex-1 py-4 text-base"
-            icon={<CheckCircle size={18} />}>
-            {t("rep.confirm")}
+          <Btn onClick={submitReport} disabled={submitting} className="flex-1 py-4 text-base"
+            icon={submitting ? <Loader size={18} className="animate-spin" /> : <CheckCircle size={18} />}>
+            {submitting ? "Submitting..." : t("rep.confirm")}
           </Btn>
           <Btn variant="ghost" onClick={() => onNav("report-step1")} className="px-4"
             icon={<ArrowLeft size={16} />}>
             {t("rep.edit")}
           </Btn>
         </div>
+        {submitError && <p className="text-xs font-semibold" style={{ color: "var(--error)" }}>{submitError}</p>}
       </div>
     </div>
   );
@@ -3404,6 +3389,7 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── SUBMIT SUCCESS ────────────────────────────────────────────────────────────
 function SubmitSuccessScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
+  const { report } = useApp();
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 text-center"
       style={{ background: "var(--bg)" }}>
@@ -3432,9 +3418,10 @@ function SubmitSuccessScreen({ onNav }: { onNav: (s: Screen) => void }) {
           <ClipboardList size={12} /> Challenge ID
         </p>
         <div className="text-3xl font-black font-mono tracking-wide mb-2" style={{ color: "var(--navy)" }}>
-          JH-WTR-1024
+          {report.problemCode || "Submitted"}
         </div>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>{t("success.save_hint")}</p>
+        <p className="text-xs mt-3 font-semibold" style={{ color: "var(--text)" }}>{report.category}: {report.description}</p>
       </Card>
       <div className="flex gap-3 w-full max-w-xs">
         <Btn onClick={() => onNav("tracking")} className="flex-1" icon={<MapPin size={16} />}>
@@ -3451,6 +3438,7 @@ function SubmitSuccessScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── TRACKING ─────────────────────────────────────────────────────────────────
 function TrackingScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
+  const { report } = useApp();
   const timeline = [
     { label: "Challenge Submitted", sub: "Ram Kumar • Aug 28, 2026", done: true },
     { label: "AI Processed", sub: "Water Mgmt • Priority: 87/100", done: true },
@@ -3471,7 +3459,7 @@ function TrackingScreen({ onNav }: { onNav: (s: Screen) => void }) {
         </button>
         <h1 className="text-xl font-black text-white">{t("track.title")}</h1>
         <div className="mt-2 px-3 py-1 rounded-lg inline-block" style={{ background: "rgba(255,255,255,0.1)" }}>
-          <span className="text-xs font-mono text-white">JH-WTR-1024</span>
+          <span className="text-xs font-mono text-white">{report.problemCode || "Your submitted challenge"}</span>
         </div>
 
         {/* Mitra Tracking Guidance - ONLY for Individual Citizen */}
@@ -3490,18 +3478,19 @@ function TrackingScreen({ onNav }: { onNav: (s: Screen) => void }) {
       <div className="px-4 py-5">
         <Card className="p-4 mb-5">
           <div className="flex items-center justify-between mb-2">
-            <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>Handpump kharab hai</p>
+            <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>{report.description || "Your submitted problem"}</p>
             <StatusBadge status="in-progress" />
           </div>
           <p className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-            <MapPin size={11} /> Bakri Bazar, Kanke, Ranchi
+            <MapPin size={11} /> {[report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Map-selected location"}
           </p>
+          {report.files.length > 0 && <div className="flex gap-2 mt-3 overflow-x-auto">{report.files.map((file, index) => file.type.startsWith("image/") ? <img key={`${file.name}-${index}`} src={report.previews[index]} alt={file.name} className="w-16 h-16 rounded-lg object-cover border" style={{ borderColor: "var(--border)" }} /> : <div key={`${file.name}-${index}`} className="w-16 h-16 rounded-lg border flex flex-col items-center justify-center text-[9px] p-1" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}><Video size={18} /><span className="truncate w-full text-center">{file.name}</span></div>)}</div>}
           <div className="mt-3 p-3 rounded-xl" style={{ background: "var(--success-bg)" }}>
             <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--green)" }}>
-              <GraduationCap size={13} /> BIT Mesra is currently working on your problem.
+              <GraduationCap size={13} /> Your {report.category || "selected"} problem is being reviewed.
             </p>
             <p className="text-xs mt-1" style={{ color: "var(--success)" }}>
-              Faculty and researchers are developing a smart monitoring solution.
+              Your submitted report is safely recorded and will move through review and matching.
             </p>
           </div>
         </Card>
@@ -3661,6 +3650,7 @@ function ReportForSomeoneScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── UNIVERSITY DASHBOARD ─────────────────────────────────────────────────────
 function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const profile = useProfileDisplay("university");
   const challenges = [
     { title: "Village Irrigation Canal Leakage", loc: "Kanke, Ranchi", pri: 87, match: 92, pop: 500, cat: "Water", status: "new" as const },
     { title: "School roof needs repair", loc: "Namkum, Ranchi", pri: 72, match: 86, pop: 320, cat: "Education", status: "matched" as const },
@@ -3674,7 +3664,7 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
-              <GraduationCap size={22} /> {t("uni.dashboard")}
+              <GraduationCap size={22} /> {profile.name || t("uni.dashboard")}
             </h1>
             <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>BIT Mesra, Ranchi — Innovation Partner</p>
           </div>
@@ -4110,6 +4100,7 @@ function ProjectHealthScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const profile = useProfileDisplay("industry");
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       <NavBar role="industry" screen="industry-dashboard" onNav={onNav} />
@@ -4119,7 +4110,7 @@ function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
             <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
               <Factory size={22} /> {t("ind.dashboard")}
             </h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>TechGrow Solutions Pvt. Ltd.</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{profile.name || "Industry Partner"}{profile.detail ? ` — ${profile.detail}` : ""}</p>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
@@ -4577,6 +4568,7 @@ function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: stri
   const { t, lang } = useApp();
   const [isEditing, setIsEditing] = useState(false);
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   // Role-specific initial state
   const [citizenData, setCitizenData] = useState({
@@ -4638,10 +4630,31 @@ function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: stri
     phone: "+91 98765 43210",
   });
 
-  const handleSave = () => {
-    setIsEditing(false);
-    setShowSavedToast(true);
-    setTimeout(() => setShowSavedToast(false), 3500);
+  useEffect(() => {
+    let active = true;
+    getProfileMe().then(({ profile, user }) => {
+      if (!active || !profile) return;
+      if (role === "citizen") setCitizenData(v => ({ ...v, name: profile.name || "", gender: profile.gender || "", dob: profile.date_of_birth?.slice(0, 10) || "", phone: user?.phone_number || v.phone, houseNumber: profile.house_number || "", landmark: profile.landmark || "", city: profile.city_village || "", pincode: profile.pincode || "", district: profile.district || "" }));
+      else if (role === "panchayat") setPanchayatData({ panchayatName: profile.panchayat_name || "", mukhiyaName: profile.sarpanch_mukhiya_name || "", officeAddress: profile.office_address || "", phone: profile.official_phone || "", district: profile.district || "", block: profile.block || "", villages: profile.villages_covered || "" });
+      else if (role === "localorg" || role === "org-victim") setLocalOrgData({ orgName: profile.organization_name || "", spocName: profile.spoc_name || "", designation: profile.designation || "", officeAddress: profile.office_address || "", district: profile.district || "", block: profile.block || "", area: profile.panchayat_area || "", phone: profile.organization_contact || "" });
+      else if (role === "university") setUniData({ uniName: profile.university_name || "", spocName: profile.spoc_name || "", address: profile.institutional_address || "", expertise: profile.domain_expertise || "", phone: profile.spoc_number || "" });
+      else if (role === "industry") setIndustryData({ industryName: profile.industry_name || "", spocName: profile.spoc_name || "", category: profile.industry_type || "", address: profile.company_address || "", expertise: profile.domain_expertise || "", email: profile.official_email || user?.email || "" });
+      else if (role === "org-solver" || role === "org") setOrgSolverData({ orgName: profile.organization_name || "", spocName: profile.spoc_name || "", focus: profile.domain_expertise || profile.domain || "", address: profile.registered_address || "", phone: profile.spoc_contact || "" });
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [role]);
+
+  const handleSave = async () => {
+    setSaveError("");
+    try {
+      if (role === "citizen") await saveCitizenProfile({ name: citizenData.name, phoneNumber: citizenData.phone, gender: citizenData.gender, dateOfBirth: citizenData.dob, houseNumber: citizenData.houseNumber, cityVillage: citizenData.city, pincode: citizenData.pincode, landmark: citizenData.landmark, district: citizenData.district, residentialAddress: `${citizenData.houseNumber}, ${citizenData.landmark}, ${citizenData.city}, ${citizenData.district}, ${citizenData.pincode}` });
+      else if (role === "panchayat") await savePanchayatProfile({ panchayatName: panchayatData.panchayatName, sarpanchName: panchayatData.mukhiyaName, district: panchayatData.district, block: panchayatData.block, villagesCovered: panchayatData.villages, officeAddress: panchayatData.officeAddress, officialPhone: panchayatData.phone });
+      else if (role === "localorg" || role === "org-victim") await saveLocalOrgProfile({ organizationName: localOrgData.orgName, spocName: localOrgData.spocName, designation: localOrgData.designation, district: localOrgData.district, block: localOrgData.block, panchayatArea: localOrgData.area, officeAddress: localOrgData.officeAddress, organizationContact: localOrgData.phone });
+      else if (role === "university") await saveUniProfile({ universityName: uniData.uniName, spocName: uniData.spocName, spocNumber: uniData.phone, institutionalAddress: uniData.address, domainExpertise: uniData.expertise });
+      else if (role === "industry") await saveIndustryProfile({ industryName: industryData.industryName, industryType: industryData.category, spocName: industryData.spocName, officialEmail: industryData.email, companyAddress: industryData.address, domainExpertise: industryData.expertise });
+      else await saveOrgProfile({ organizationName: orgSolverData.orgName, spocName: orgSolverData.spocName, spocContact: orgSolverData.phone, domainExpertise: orgSolverData.focus, registeredAddress: orgSolverData.address });
+      setIsEditing(false); setShowSavedToast(true); setTimeout(() => setShowSavedToast(false), 3500);
+    } catch (err: any) { setSaveError(err.message || "Could not save profile."); }
   };
 
   const getRoleHeader = () => {
@@ -4714,6 +4727,7 @@ function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: stri
             <span>{t("profile.saved")}</span>
           </div>
         )}
+        {saveError && <div className="mb-4 p-3 rounded-xl text-xs font-semibold" style={{ background: "var(--error-bg)", color: "var(--error)" }}>{saveError}</div>}
 
         {/* Mitra Compact Guidance Banner (Image 2 style) - ONLY FOR INDIVIDUAL CITIZEN */}
         {role === "citizen" && (
@@ -5437,6 +5451,7 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
   const [screen, setScreen] = useState<Screen>("landing");
   const [role, setRole] = useState("citizen");
+  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" });
   // On initial website load, show language selection popup, followed immediately by Mitra full-body welcome
   const [showLangModal, setShowLangModal] = useState(true);
   const [showMitraWelcome, setShowMitraWelcome] = useState(false);
@@ -5474,7 +5489,7 @@ export default function App() {
   const props = { onNav: navigate };
 
   return (
-    <Ctx.Provider value={{ lang, setLang: setLangAndSave, dark, setDark: setDarkAndSave, t, role, setRole }}>
+    <Ctx.Provider value={{ lang, setLang: setLangAndSave, dark, setDark: setDarkAndSave, t, role, setRole, report, setReport }}>
       <div className={dark ? "dark" : ""} style={{ minHeight: "100%", background: "var(--bg)", color: "var(--text)" }}>
         {/* Global NavJhar Rotating Loading Overlay */}
         <NavJharLoadingOverlay show={loading || initialLoading} />

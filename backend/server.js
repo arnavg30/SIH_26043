@@ -23,15 +23,29 @@ const firebaseAuth = getAuth();
 // ==================== OCI Object Storage ====================
 const common = require("oci-common");
 const objectstorage = require("oci-objectstorage");
-const ociProvider = new common.ConfigFileAuthenticationDetailsProvider(
-  "C:\\Users\\arnav\\.oci\\config.txt"
-);
-const objectStorageClient = new objectstorage.ObjectStorageClient({
-  authenticationDetailsProvider: ociProvider,
-});
-const namespaceName = process.env.OCI_NAMESPACE;
+// const ociProvider = new common.ConfigFileAuthenticationDetailsProvider(
+//   "C:\\Users\\arnav\\.oci\\config.txt"
+// );
+// const objectStorageClient = new objectstorage.ObjectStorageClient({
+//   authenticationDetailsProvider: ociProvider,
+// });
+let namespaceName = process.env.OCI_NAMESPACE;
 const bucketName = process.env.OCI_BUCKET_NAME;
 async function uploadToOCI(file, objectName) {
+  const ociProvider = new common.ConfigFileAuthenticationDetailsProvider(
+    "C:\\Users\\arnav\\.oci\\config.txt"
+  );
+
+  const objectStorageClient = new objectstorage.ObjectStorageClient({
+    authenticationDetailsProvider: ociProvider,
+  });
+
+  if (!namespaceName) {
+    const namespaceResponse = await objectStorageClient.getNamespace({});
+    namespaceName = namespaceResponse.value;
+  }
+  if (!bucketName) throw new Error("OCI_BUCKET_NAME is not configured");
+
   await objectStorageClient.putObject({
     namespaceName,
     bucketName,
@@ -46,9 +60,9 @@ async function uploadToOCI(file, objectName) {
 // ---------------- PostgreSQL ----------------
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-pool.query("SELECT NOW()")
-  .then(() => console.log("PostgreSQL connected!"))
-  .catch((err) => console.error("PostgreSQL connection failed:", err.message));
+// pool.query("SELECT NOW()")
+//   .then(() => console.log("PostgreSQL connected!"))
+//   .catch((err) => console.error("PostgreSQL connection failed:", err.message));
 
 // ---------------- Helpers ----------------
 function clean(value) {
@@ -206,13 +220,15 @@ app.put("/api/profile/citizen", verifyToken, async (req, res) => {
     if (user.sub_type !== "CITIZEN") return res.status(403).json({ message: "Citizen profile required" });
 
     const {
-      name, gender, dateOfBirth, houseNumber, cityVillage,
+      name, phoneNumber, gender, dateOfBirth, houseNumber, cityVillage,
       pincode, landmark, district, residentialAddress,
     } = req.body || {};
 
     if (!clean(name)) return res.status(400).json({ message: "Name is required" });
+    if (!/^\d{10}$/.test(String(phoneNumber || "").replace(/\D/g, ""))) return res.status(400).json({ message: "A valid 10-digit mobile number is required" });
 
     await client.query("BEGIN");
+    await client.query(`UPDATE users SET phone_number = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2`, [String(phoneNumber).replace(/\D/g, ""), user.user_id]);
     const result = await client.query(
       `INSERT INTO citizens
         (user_id, name, gender, date_of_birth, house_number, city_village, pincode, landmark, district, residential_address)
@@ -581,17 +597,19 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
     if (!user) return res.status(404).json({ message: "User not synced" });
 
     const {
-      categoryId, title, description, latitude, longitude,
+      categoryId: rawCategoryId, categoryName, title, description, latitude, longitude,
       district, block, panchayatWard, landmark, siteAddress,
       reportedFor = "Myself", beneficiaryName, beneficiaryPhone, isAnonymous = false,
       severity = "MEDIUM",
     } = req.body || {};
 
-    if (!categoryId || !clean(title) || !clean(description) || !clean(district) || !clean(block) || !clean(siteAddress)) {
-      return res.status(400).json({ message: "categoryId, title, description, district, block and siteAddress are required" });
+    if ((!rawCategoryId && !clean(categoryName)) || !clean(title) || !clean(description) || !clean(district) || !clean(block) || !clean(siteAddress)) {
+      return res.status(400).json({ message: "category, title, description, district, block and siteAddress are required" });
     }
-
-    const cat = await client.query(`SELECT category_id, category_name FROM problem_categories WHERE category_id = $1`, [categoryId]);
+    const cat = await client.query(
+      `SELECT category_id, category_name FROM problem_categories WHERE category_id = $1 OR LOWER(category_name) = LOWER($2) LIMIT 1`,
+      [rawCategoryId || -1, clean(categoryName) || ""]
+    );
     if (!cat.rows[0]) return res.status(400).json({ message: "Invalid category" });
 
     const code = makeProblemCode(cat.rows[0].category_name);
@@ -608,8 +626,10 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
        clean(district), clean(block), clean(panchayatWard) || null, clean(landmark) || null, clean(siteAddress),
        reportedFor, clean(beneficiaryName) || null, clean(beneficiaryPhone) || null, Boolean(isAnonymous), severity]
     );
+    const mediaWarnings = [];
     for (const file of mediaFiles) {
-  const objectName = `${user.user_id}/${result.rows[0].problem_id}/${Date.now()}-${file.originalname}`;
+      try {
+   const objectName = `${user.user_id}/${result.rows[0].problem_id}/${Date.now()}-${file.originalname}`;
 
   await uploadToOCI(file, objectName);
 
@@ -631,10 +651,18 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
       file.size,
     ]
   );
+      } catch (mediaError) {
+        // A storage misconfiguration must not discard an otherwise valid
+        // community report. The UI still retains a local preview and the API
+        // tells the caller that the attachment needs a retry.
+        console.error("OCI media upload failed:", mediaError.message);
+        mediaWarnings.push({ fileName: file.originalname, message: mediaError.message });
+      }
 }
     res.status(201).json({
   problem: result.rows[0],
   media: mediaFiles.map(file => file.originalname),
+  mediaWarnings,
 }); 
   } catch (err) {
     console.error("POST /api/problems:", err);
@@ -770,7 +798,5 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Internal server error" });
 });
 
-// `PORT` belongs to the Vite/Figma preview (usually 8443). Keep the API on a
-// separate port and allow deployments to override it explicitly.
-const PORT = process.env.BACKEND_PORT || 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

@@ -1,8 +1,7 @@
 import { auth } from "./firebase/config";
 
-// Use a relative URL so the Vite proxy can forward preview requests to the
-// local backend. A browser inside the Figma preview cannot reach its own
-// `localhost:5000` directly.
+// Route browser calls through Vite's /api proxy so the preview iframe can
+// reach the local backend without treating its own localhost as the API host.
 const API_BASE = "";
 
 export async function apiFetch(
@@ -31,7 +30,7 @@ export async function apiFetch(
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.message || "API request failed");
+    throw new Error(data.error || data.message || "API request failed");
   }
 
   return data;
@@ -48,8 +47,13 @@ export async function getProfileMe() {
   return apiFetch("/api/profile/me");
 }
 
+export async function submitProblem(data: FormData) {
+  return apiFetch("/api/problems", { method: "POST", body: data });
+}
+
 export async function saveCitizenProfile(data: {
   name: string;
+  phoneNumber?: string;
   gender?: string;
   dateOfBirth?: string;
   houseNumber?: string;
