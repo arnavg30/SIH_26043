@@ -51,7 +51,7 @@ INSERT INTO languages (language_name, language_code) VALUES
 -- Central identity table for both Victims (Citizen, Panchayat, Local Org)
 -- and Solvers (University, Industry, Organization)
 -- ==============================================================================
-CREATE TABLE users (
+ (
     user_id         BIGSERIAL PRIMARY KEY,
     user_type       VARCHAR(20) NOT NULL CHECK (user_type IN ('VICTIM', 'SOLVER')),
     sub_type        VARCHAR(30) NOT NULL CHECK (sub_type IN ('CITIZEN', 'PANCHAYAT', 'LOCAL_ORG', 'ORGANIZATION', 'INDUSTRY', 'UNIVERSITY')),
