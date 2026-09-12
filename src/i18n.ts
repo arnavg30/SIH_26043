@@ -302,7 +302,7 @@ const T: Translations = {
   "mitra.profile.phone": { en: "Enter your mobile number.", hi: "अपना मोबाइल नंबर दर्ज करें।", sa: "Apan mobile number likhao." },
   "mitra.profile.otp": { en: "Enter the 6-digit OTP sent to your phone.", hi: "अपने फ़ोन पर आया 6 अंकों का OTP भरें।", sa: "Apan phone te hechekan 6-digit OTP dalo." },
   "mitra.profile.name": { en: "Enter your full name.", hi: "सबसे पहले अपना नाम लिखें।", sa: "Sabse pehle apan nutum likhao." },
-  "mitra.profile.gender": { en: "Select your gender.", hi: "अपना gender चुनें।", sa: "Apan gender chunao." },
+  "mitra.profile.gender": { en: "Select your gender.", hi: "अपना लिंग चुनें।", sa: "Apan Jaanang chunao." },
   "mitra.profile.dob": { en: "Select your date of birth.", hi: "अपनी जन्म तिथि चुनें।", sa: "Apan janam mahina-bochor chunao." },
   "mitra.profile.address": { en: "Enter your address.", hi: "अब अपना पता भरें।", sa: "Nit apan thikana likhao." },
   "mitra.dash.greeting": {
