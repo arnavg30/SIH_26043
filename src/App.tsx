@@ -3548,10 +3548,11 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
                         setIsTranscribing(true);
                         try {
                           const { transcribeAudio } = await import("./api");
-                          const res = await transcribeAudio(recordedAudio);
-                          const data = await res.json();
-                          setDesc(data.text);
-                          setMode("text");
+                          const data = await transcribeAudio(recordedAudio);
+                          if (data.error) { alert(data.error); } else {
+                            setDesc(data.transcription || data.text || "");
+                            setMode("text");
+                          }
                         } catch (e: any) {
                           alert(e.message || "Failed to transcribe");
                         } finally {
@@ -4189,6 +4190,11 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
               <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                 {[report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Map location selected"}
               </p>
+              {report.latitude && report.longitude && (
+                <p className="text-xs font-mono mt-1" style={{ color: "var(--text-muted)" }}>
+                  {Number(report.latitude).toFixed(4)}, {Number(report.longitude).toFixed(4)}
+                </p>
+              )}
             </div>
             <div className="flex gap-3">
               <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--success-bg)" }}>
@@ -4391,7 +4397,7 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
             {[
               ["Domain", report.aiAnalysis?.category || report.category || "Other"],
               ["Severity", report.aiAnalysis?.severity || "Pending Assessment"],
-              ["Required Skills", report.aiAnalysis?.requiredSkills || "TBD"],
+              ["Required Skills", Array.isArray(report.aiAnalysis?.requiredSkills) ? report.aiAnalysis.requiredSkills.join(", ") : (report.aiAnalysis?.requiredSkills || "TBD")],
               ["Expected Impact", report.aiAnalysis?.expectedImpact || "TBD"],
               ["Location", [report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Unknown"],
             ].map(([k, v]) => (
@@ -4402,6 +4408,23 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
             ))}
           </div>
         </Card>
+
+        {report.aiAnalysis && !report.aiAnalysis.error && (
+          <Card className="p-4 mb-5">
+            <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: "var(--navy)" }}>
+              <Activity size={16} /> AI Analysis Summary
+            </h3>
+            <p className="text-sm leading-relaxed" style={{ color: "var(--text)" }}>
+              {report.aiAnalysis.expectedImpact || "AI analysis completed. Category and priority have been assigned based on the problem description."}
+            </p>
+            {report.aiAnalysis.originalText && (
+              <div className="mt-3 p-3 rounded-lg" style={{ background: "var(--bg)" }}>
+                <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>Original Problem Text:</p>
+                <p className="text-sm italic" style={{ color: "var(--text)" }}>"{report.aiAnalysis.originalText}"</p>
+              </div>
+            )}
+          </Card>
+        )}
 
         {report.aiAnalysis?.isDuplicate && (
           <div className="p-4 rounded-xl border" style={{ background: "var(--warning-bg)", borderColor: "var(--warning)" }}>
