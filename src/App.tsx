@@ -3970,6 +3970,16 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
         </h1>
       </div>
       <div className="px-4 py-5 space-y-4">
+        {report.files.some(f => f.type.startsWith("audio/")) && report.description && (
+          <Card className="p-4" style={{ background: "var(--card)", borderColor: "var(--navy)" }}>
+            <h3 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ color: "var(--navy)" }}>
+              <Mic size={16} /> Voice Transcription
+            </h3>
+            <p className="text-sm italic" style={{ color: "var(--text)" }}>
+              "{report.description}"
+            </p>
+          </Card>
+        )}
         <Card className="p-4">
           <h3 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "var(--text)" }}>
             <CheckCircle size={16} color="var(--success)" /> AI Detection Results
