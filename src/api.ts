@@ -207,3 +207,23 @@ export async function checkEmailExists(email: string) {
   }
   return res.json();
 }
+
+export async function transcribeAudio(audioFile: File) {
+  const formData = new FormData();
+  formData.append("audio", audioFile);
+  const token = await auth.currentUser?.getIdToken();
+  const res = await fetch("/api/transcribe", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData
+  });
+  if (!res.ok) throw new Error("Transcription failed");
+  return res.json();
+}
+
+export async function findSimilarIdeas(ideas?: {text: string, location: string}[]) {
+  return apiFetch("/api/problems/find-similar-ideas", {
+    method: "POST",
+    body: JSON.stringify({ ideas })
+  });
+}

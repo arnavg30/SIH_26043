@@ -24,7 +24,7 @@ import {
   saveCitizenProfile, savePanchayatProfile, saveLocalOrgProfile,
   saveOrgProfile, saveIndustryProfile, saveUniProfile, submitProblem,
   geocodeProblemAddress,
-  getRecommendedProblems, getMyProblems, acceptProblem, submitSolutionAI, markSolved
+  getRecommendedProblems, getMyProblems, acceptProblem, submitSolutionAI, markSolved, transcribeAudio
 } from "./api";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -1713,6 +1713,7 @@ function OrgVictimLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
   const [problems, setProblems] = useState<any[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
   useEffect(() => { getMyProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
   const profile = useProfileDisplay("citizen");
   const mitraGreeting = profile.name
@@ -1724,6 +1725,13 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
     { icon: <Activity size={20} />, val: problems.filter((p: any) => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length.toString(), key: "cit.inprogress", color: "var(--green)" },
     { icon: <CheckCircle size={20} />, val: problems.filter((p: any) => p.status === "SOLVED").length.toString(), key: "cit.resolved", color: "var(--success)" },
   ];
+  if (selectedFilter) {
+    let fp = problems;
+    if (selectedFilter.filterStr === "PENDING") fp = problems.filter(p => p.status === "PENDING");
+    if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED");
+    if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
+    return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
+  }
   return (
     <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
       <NavBar role="citizen" screen="citizen-dashboard" onNav={onNav} />
@@ -1773,7 +1781,7 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         {/* Status grid */}
         <div className="grid grid-cols-2 gap-3 mb-5">
           {statuses.map(s => (
-            <Card key={s.key} className="p-3 flex items-center gap-3">
+            <Card key={s.key} className="p-3 flex items-center gap-3 cursor-pointer hover:scale-95 transition-all" onClick={() => setSelectedFilter({ title: t(s.key), color: s.color, filterStr: s.key === "cit.submitted" || s.key === "org.recommended" || s.key === "uni.recommended" ? "ALL" : s.key === "cit.underreview" || s.key === "org.collabs" || s.key === "uni.active" ? "PENDING" : s.key === "cit.inprogress" || s.key === "org.collabs" || s.key === "uni.active" ? "IN_PROGRESS" : "SOLVED" })}>
               <div className="w-10 h-10 rounded-xl flex items-center justify-center"
                 style={{ background: `color-mix(in srgb, ${s.color} 12%, transparent)`, color: s.color }}>
                 {s.icon}
@@ -1838,6 +1846,7 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
   const [problems, setProblems] = useState<any[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
   useEffect(() => { getMyProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
   const profile = useProfileDisplay("panchayat");
   const statuses = [
@@ -1847,6 +1856,13 @@ function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
     { label: "Resolved", val: problems.filter((p: any) => p.status === "SOLVED").length.toString(), color: "var(--success)", icon: <CheckCircle size={18} /> },
   ];
 
+  if (selectedFilter) {
+    let fp = problems;
+    if (selectedFilter.filterStr === "PENDING") fp = problems.filter(p => p.status === "PENDING");
+    if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED");
+    if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
+    return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
+  }
   return (
     <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
       <NavBar role="panchayat" screen="panchayat-dashboard" onNav={onNav} />
@@ -1933,6 +1949,7 @@ function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 function OrgVictimDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
   const [problems, setProblems] = useState<any[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
   useEffect(() => { getMyProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
   const profile = useProfileDisplay("localorg");
   const statuses = [
@@ -1942,6 +1959,13 @@ function OrgVictimDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
     { label: "Resolved", val: problems.filter((p: any) => p.status === "SOLVED").length.toString(), color: "var(--success)", icon: <CheckCircle size={18} /> },
   ];
 
+  if (selectedFilter) {
+    let fp = problems;
+    if (selectedFilter.filterStr === "PENDING") fp = problems.filter(p => p.status === "PENDING");
+    if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED");
+    if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
+    return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
+  }
   return (
     <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
       <NavBar role="localorg" screen="org-victim-dashboard" onNav={onNav} />
@@ -2280,7 +2304,14 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
   const profile = useProfileDisplay("org-solver");
   const [problems, setProblems] = useState<any[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
   useEffect(() => { getRecommendedProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
+  if (selectedFilter) {
+    let fp = problems;
+    if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS");
+    if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
+    return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
+  }
   return (
     <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
       <NavBar role="org-solver" screen="org-solver-dashboard" onNav={onNav} />
@@ -2297,7 +2328,7 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
             { icon: <CheckCircle size={18} />, label: t("org.completed"), value: problems.filter(p => p.status === "SOLVED").length.toString(), color: "var(--success)", screen: "" as Screen },
             { icon: <Users size={18} />, label: t("org.reach"), value: "12K", color: "var(--navy)", screen: "" as Screen },
           ].map(k => (
-            <div key={k.label} onClick={() => k.screen ? onNav(k.screen) : null} className={k.screen ? "cursor-pointer active:scale-95 transition-all" : ""}>
+            <div key={k.label} onClick={() => setSelectedFilter({ title: k.label, color: k.color, filterStr: k.label.includes("Completed") || k.label.includes("Resolved") ? "SOLVED" : k.label.includes("Collab") || k.label.includes("Active") ? "IN_PROGRESS" : "ALL" })} className="cursor-pointer active:scale-95 transition-all">
               <KPICard icon={k.icon} label={k.label} value={k.value} color={k.color} />
             </div>
           ))}
@@ -2923,6 +2954,7 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
   const videoInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [isTranscribing, setIsTranscribing] = useState(false);
 
   const handleCapturePhoto = (file: File) => {
     const previewUrl = URL.createObjectURL(file);
@@ -4202,6 +4234,7 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, setReport } = useApp();
   const profile = useProfileDisplay("university");
   const [problems, setProblems] = useState<any[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
   const [myProjects, setMyProjects] = useState<any[]>([]);
 
   useEffect(() => {
@@ -4216,6 +4249,12 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
           }).catch(console.error);
         }
       });
+  if (selectedFilter) {
+    let fp = problems;
+    if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS");
+    if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
+    return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
+  }
       return () => unsubscribe();
     });
   }, []);
@@ -4709,6 +4748,7 @@ function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, setReport } = useApp();
   const profile = useProfileDisplay("industry");
   const [problems, setProblems] = useState<any[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
   const [myProjects, setMyProjects] = useState<any[]>([]);
 
   useEffect(() => {
@@ -4723,6 +4763,12 @@ function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
           }).catch(console.error);
         }
       });
+  if (selectedFilter) {
+    let fp = problems;
+    if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS");
+    if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
+    return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
+  }
       return () => unsubscribe();
     });
   }, []);
@@ -6196,6 +6242,47 @@ function NavJharLoadingOverlay({ show }: { show: boolean }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+
+function FilteredProblemsList({ title, color, problems, onBack, onNav }: { title: string; color: string; problems: any[]; onBack: () => void; onNav: (s: Screen) => void }) {
+  const { t } = useApp();
+  return (
+    <div className="min-h-screen pb-10 flex flex-col" style={{ background: "var(--bg)" }}>
+      <div className="px-4 py-4 flex items-center gap-3 sticky top-0 z-10" style={{ background: "var(--nav-bg)", color: "white" }}>
+        <button onClick={onBack} className="p-2 -ml-2 rounded-full" style={{ background: "rgba(255,255,255,0.1)" }}>
+          <ArrowLeft size={20} />
+        </button>
+        <h2 className="text-lg font-bold">{title}</h2>
+      </div>
+      <div className="p-4 flex-1">
+        <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color }}>{problems.length} PROBLEMS FOUND</h3>
+        {problems.length === 0 ? (
+          <div className="text-center py-10 opacity-50">
+            <CheckCircle size={40} className="mx-auto mb-3" />
+            <p>No problems in this status</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {problems.map((p, i) => (
+              <Card key={i} className="p-4 relative">
+                <div className="absolute top-4 right-4 text-xs font-bold px-2 py-1 rounded"
+                     style={{ background: `color-mix(in srgb, ${color} 15%, transparent)`, color }}>
+                  {p.status || "PENDING"}
+                </div>
+                <h3 className="font-bold mb-1" style={{ color: "var(--text)", paddingRight: 80 }}>{p.title || p.description?.substring(0, 30)}</h3>
+                <p className="text-xs mb-3 line-clamp-2" style={{ color: "var(--text-muted)" }}>{p.description}</p>
+                <Btn variant="secondary" className="w-full text-xs" onClick={() => {
+                   // Usually navigating to detail screen needs saving problem code
+                   // We don't have problem code nav here easily, just basic view
+                }}>View Details</Btn>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("jsic_lang") as Lang) || "en");
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
