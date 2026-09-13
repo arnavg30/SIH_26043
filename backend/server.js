@@ -811,6 +811,7 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
       district, block, panchayatWard, landmark, siteAddress,
       reportedFor = "Myself", beneficiaryName, beneficiaryPhone, isAnonymous = false,
       severity = "MEDIUM", voiceDurationSeconds,
+      priorityScore, aiCategory, aiConfidence, isDuplicate, duplicateOfId, requiredSkills, expectedImpact
     } = req.body || {};
 
     if ((!rawCategoryId && !clean(categoryName)) || !clean(title) || !clean(description) || !clean(district) || !clean(block) || !clean(siteAddress)) {
@@ -827,14 +828,22 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
         `INSERT INTO problems
          (problem_code, submitted_by, category_id, title, description, latitude, longitude,
           district, block, panchayat_ward, landmark, site_address, reported_for,
-          beneficiary_name, beneficiary_phone, is_anonymous, severity, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'SUBMITTED')
+          beneficiary_name, beneficiary_phone, is_anonymous, severity, status,
+          priority_score, ai_category_detected, ai_confidence, is_duplicate, duplicate_of_id, required_skills, expected_impact)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'SUBMITTED', $18, $19, $20, $21, $22, $23, $24)
          RETURNING *`,
        [code, user.user_id, cat.rows[0].category_id, clean(title), clean(description),
  latitude === "" ? null : latitude,
  longitude === "" ? null : longitude,
        clean(district), clean(block), clean(panchayatWard) || null, clean(landmark) || null, clean(siteAddress),
-       reportedFor, clean(beneficiaryName) || null, clean(beneficiaryPhone) || null, Boolean(isAnonymous), severity]
+       reportedFor, clean(beneficiaryName) || null, clean(beneficiaryPhone) || null, Boolean(isAnonymous), severity,
+       priorityScore ? Number(priorityScore) : null,
+       clean(aiCategory) || null,
+       clean(aiConfidence) || null,
+       isDuplicate === "true",
+       duplicateOfId ? Number(duplicateOfId) : null,
+       clean(requiredSkills) || null,
+       clean(expectedImpact) || null]
     );
     const mediaWarnings = [];
     for (const file of mediaFiles) {
