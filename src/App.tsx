@@ -24,6 +24,7 @@ import {
   saveCitizenProfile, savePanchayatProfile, saveLocalOrgProfile,
   saveOrgProfile, saveIndustryProfile, saveUniProfile, submitProblem,
   geocodeProblemAddress,
+  getRecommendedProblems, getMyProblems, acceptProblem, submitSolutionAI, markSolved
 } from "./api";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -4085,14 +4086,27 @@ function ReportForSomeoneScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 // ─── UNIVERSITY DASHBOARD ─────────────────────────────────────────────────────
 function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
+  const { t, setReport } = useApp();
   const profile = useProfileDisplay("university");
-  const challenges = [
-    { title: "Village Irrigation Canal Leakage", loc: "Kanke, Ranchi", pri: 87, match: 92, pop: 500, cat: "Water", status: "new" as const },
-    { title: "School roof needs repair", loc: "Namkum, Ranchi", pri: 72, match: 86, pop: 320, cat: "Education", status: "matched" as const },
-    { title: "Primary health centre closed", loc: "Ratu, Ranchi", pri: 91, match: 79, pop: 1200, cat: "Healthcare", status: "new" as const },
-    { title: "Solar-powered street lighting", loc: "Ormanjhi, Ranchi", pri: 65, match: 88, pop: 450, cat: "Energy", status: "validated" as const },
-  ];
+  const [problems, setProblems] = useState<any[]>([]);
+  const [myProjects, setMyProjects] = useState<any[]>([]);
+
+  useEffect(() => {
+    import("./firebase/config").then(({ auth }) => {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (user) {
+          getRecommendedProblems().then(data => {
+            setProblems(data.problems || []);
+          }).catch(console.error);
+          getMyProblems().then(data => {
+            setMyProjects(data.problems || []);
+          }).catch(console.error);
+        }
+      });
+      return () => unsubscribe();
+    });
+  }, []);
+
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
@@ -4102,63 +4116,107 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
             <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
               <GraduationCap size={22} /> {profile.name || t("uni.dashboard")}
             </h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>BIT Mesra, Ranchi — Innovation Partner</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Innovation Partner</p>
           </div>
-          <span className="text-xs px-2 py-1 rounded-lg" style={{ background: "var(--warning-bg)", color: "var(--warning)" }}>Demo Data</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
           {[
-            { icon: <Bell size={18} />, label: "New Challenges", value: "8", color: "var(--amber)" },
-            { icon: <CheckCircle size={18} />, label: "Accepted", value: "14", color: "var(--green)" },
-            { icon: <Activity size={18} />, label: "Active Projects", value: "11", color: "var(--navy)" },
-            { icon: <ThumbsUp size={18} />, label: "Completed", value: "23", color: "var(--success)" },
-            { icon: <AlertTriangle size={18} />, label: "At Risk", value: "2", color: "var(--error)" },
+            { icon: <Bell size={18} />, label: "New Challenges", value: problems.length.toString(), color: "var(--amber)" },
+            { icon: <CheckCircle size={18} />, label: "Accepted", value: "0", color: "var(--green)" },
+            { icon: <Activity size={18} />, label: "Active Projects", value: "0", color: "var(--navy)" },
+            { icon: <ThumbsUp size={18} />, label: "Completed", value: "0", color: "var(--success)" },
+            { icon: <AlertTriangle size={18} />, label: "At Risk", value: "0", color: "var(--error)" },
           ].map(k => <KPICard key={k.label} {...k} />)}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {challenges.map((c, i) => (
+          {problems.map((c, i) => (
             <Card key={i} className="p-5">
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1">
-                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.title}</h3>
+                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.description || c.title || "Citizen Report"}</h3>
                   <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                    <MapPin size={11} /> {c.loc}
+                    <MapPin size={11} /> {c.district || "Map-selected location"}
                   </p>
                 </div>
-                <StatusBadge status={c.status} />
+                <StatusBadge status="new" />
               </div>
               <div className="flex gap-2 mb-3 flex-wrap">
-                <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{c.cat}</span>
+                <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{c.category_name}</span>
                 <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "var(--success-bg)", color: "var(--success)" }}>
-                  <Users size={10} className="inline mr-0.5" />{c.pop.toLocaleString()} affected
+                  <Users size={10} className="inline mr-0.5" />High Impact
                 </span>
               </div>
               <div className="flex items-center gap-2 mb-3">
                 <div className="flex-1">
-                  <div className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>Priority</div>
-                  <PriorityBar score={c.pri} />
-                </div>
-                <div className="text-right">
-                  <div className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>AI Match</div>
-                  <div className="font-black text-xl" style={{ color: "var(--success)" }}>{c.match}%</div>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>AI Match</p>
+                  <p className="text-sm font-black" style={{ color: "var(--success)" }}>{c.priority_score || 85}%</p>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Btn onClick={() => onNav("uni-challenge-detail")} variant="ghost" className="flex-1 text-xs"
-                  icon={<Eye size={13} />}>View</Btn>
-                <Btn onClick={() => onNav("team-formation")} className="flex-1 text-xs"
-                  icon={<CheckCircle size={13} />}>{t("btn.accept")}</Btn>
-                <Btn variant="danger" className="text-xs px-2" icon={<XCircle size={13} />}></Btn>
+              <div className="flex gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                <Btn variant="secondary" className="flex-1 text-xs py-2" onClick={() => {
+                  setReport(curr => ({
+                    ...curr,
+                    problemCode: c.problem_code,
+                    status: c.status,
+                    description: c.description,
+                    category: c.category_name,
+                    district: c.district,
+                    block: c.block,
+                    panchayat: c.panchayat_ward,
+                    village: c.village,
+                    aiData: { category: c.category_name, priorityScore: c.priority_score }
+                  }));
+                  onNav("uni-challenge-detail");
+                }}>
+                  View Details
+                </Btn>
+                <Btn className="flex-1 text-xs py-2" onClick={async () => {
+                   await acceptProblem(c.problem_code);
+                   alert("You have accepted this challenge. The status is now IN PROGRESS!");
+                   getRecommendedProblems().then(data => setProblems(data.problems || []));
+                }}>
+                  Accept
+                </Btn>
               </div>
             </Card>
           ))}
+          {problems.length === 0 && (
+             <p className="text-xs col-span-2 text-center py-5" style={{ color: "var(--text-muted)" }}>No new challenges found right now.</p>
+          )}
         </div>
-      </div>
+      
+          <h2 className="font-bold text-sm mb-3 mt-8" style={{ color: "var(--text)" }}>My Active Projects</h2>
+          {myProjects.length === 0 ? (
+            <p className="text-sm text-center py-4" style={{ color: "var(--text-muted)" }}>No active projects found.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {myProjects.map((c, i) => (
+                <Card key={i} className="p-5">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.description || c.title}</h3>
+                      <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                        <MapPin size={11} /> {c.district || "Location"}
+                      </p>
+                    </div>
+                    <StatusBadge status={c.initiative_status || c.status} />
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <Btn variant="primary" className="text-xs flex-1" onClick={() => {
+                        setReport(curr => ({ ...curr, problemCode: c.problem_code, description: c.description }));
+                        onNav("solver-dashboard");
+                    }}>View Details</Btn>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+</div>
     </div>
   );
 }
 
-// ─── UNI CHALLENGE DETAIL ─────────────────────────────────────────────────────
+
 function UniChallengeDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
   return (
@@ -4535,8 +4593,27 @@ function ProjectHealthScreen({ onNav }: { onNav: (s: Screen) => void }) {
 }
 
 function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
+  const { t, setReport } = useApp();
   const profile = useProfileDisplay("industry");
+  const [problems, setProblems] = useState<any[]>([]);
+  const [myProjects, setMyProjects] = useState<any[]>([]);
+
+  useEffect(() => {
+    import("./firebase/config").then(({ auth }) => {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (user) {
+          getRecommendedProblems().then(data => {
+            setProblems(data.problems || []);
+          }).catch(console.error);
+          getMyProblems().then(data => {
+            setMyProjects(data.problems || []);
+          }).catch(console.error);
+        }
+      });
+      return () => unsubscribe();
+    });
+  }, []);
+
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       <NavBar role="industry" screen="industry-dashboard" onNav={onNav} />
@@ -4546,15 +4623,15 @@ function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
             <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
               <Factory size={22} /> {t("ind.dashboard")}
             </h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{profile.name || "Industry Partner"}{profile.detail ? ` — ${profile.detail}` : ""}</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{profile.name || "Industry Partner"}{profile.detail ? " - " + profile.detail : ""}</p>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           {[
-            { icon: <Bell size={18} />, label: "Recommended Projects", value: "12", color: "var(--amber)" },
-            { icon: <Users size={18} />, label: "Active Partnerships", value: "4", color: "var(--green)" },
-            { icon: <GraduationCap size={18} />, label: "Mentorship", value: "3", color: "var(--navy)" },
-            { icon: <TrendingUp size={18} />, label: "CSR Funding (₹L)", value: "24.5", color: "#7C3AED" },
+            { icon: <Bell size={18} />, label: "Recommended Projects", value: problems.length.toString(), color: "var(--amber)" },
+            { icon: <Users size={18} />, label: "Active Partnerships", value: "0", color: "var(--green)" },
+            { icon: <GraduationCap size={18} />, label: "Mentorship", value: "0", color: "var(--navy)" },
+            { icon: <TrendingUp size={18} />, label: "CSR Funding (?L)", value: "0", color: "#7C3AED" },
           ].map(k => <KPICard key={k.label} {...k} />)}
         </div>
 
@@ -4562,44 +4639,197 @@ function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
           <Lightbulb size={16} /> Recommended Projects
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            { title: "Smart Irrigation Monitoring", match: 89, cat: "IoT / Agriculture", uni: "BIT Mesra", reasons: ["IoT requirement", "Agriculture domain", "Prototype support needed"] },
-            { title: "Rural Health Diagnostic Kit", match: 84, cat: "Healthcare / IoT", uni: "NIT Jamshedpur", reasons: ["Medical device IoT", "Rural deployment", "CSR opportunity"] },
-            { title: "Solar Street Lighting", match: 78, cat: "Energy / Infrastructure", uni: "IIT ISM Dhanbad", reasons: ["Solar technology", "Manufacturing capability", "Scale potential"] },
-            { title: "Digital Literacy Kiosk", match: 72, cat: "Education / Tech", uni: "BIT Mesra", reasons: ["Software development", "Rural reach", "Training support"] },
-          ].map((p, i) => (
+          {problems.map((p, i) => (
             <Card key={i} className="p-5">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
-                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{p.title}</h3>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{p.cat} • {p.uni}</p>
+                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{p.description || p.title || "Citizen Report"}</h3>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{p.category_name} � {p.district}</p>
                 </div>
                 <div className="text-right">
-                  <div className="font-black text-2xl" style={{ color: "var(--success)" }}>{p.match}%</div>
+                  <div className="font-black text-2xl" style={{ color: "var(--success)" }}>{p.priority_score || 85}%</div>
                   <div className="text-xs" style={{ color: "var(--text-muted)" }}>Match</div>
                 </div>
               </div>
               <div className="mb-3 space-y-1">
-                {p.reasons.map(r => (
-                  <p key={r} className="text-xs flex items-center gap-1.5" style={{ color: "var(--success)" }}>
-                    <CheckCircle size={11} /> {r}
+                  <p className="text-xs flex items-center gap-1.5" style={{ color: "var(--success)" }}>
+                    <CheckCircle size={11} /> High Priority Issue
                   </p>
-                ))}
+                  <p className="text-xs flex items-center gap-1.5" style={{ color: "var(--success)" }}>
+                    <CheckCircle size={11} /> {p.category_name} domain
+                  </p>
               </div>
-              <div className="flex gap-2 flex-wrap">
-                <Btn onClick={() => onNav("industry-project-detail")} variant="secondary" className="text-xs"
-                  icon={<Eye size={13} />}>View</Btn>
-                <Btn onClick={() => onNav("partnership-form")} className="text-xs" icon={<Users size={13} />}>Collaborate</Btn>
+              <div className="flex gap-2 mt-4 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
+                <Btn variant="secondary" className="flex-1" icon={<Eye size={16} />} onClick={() => {
+                  setReport(curr => ({
+                    ...curr,
+                    problemCode: p.problem_code,
+                    status: p.status,
+                    description: p.description,
+                    category: p.category_name,
+                    district: p.district,
+                    block: p.block,
+                    panchayat: p.panchayat_ward,
+                    village: p.village,
+                    aiData: { category: p.category_name, priorityScore: p.priority_score }
+                  }));
+                  onNav("industry-project-detail");
+                }}>
+                  View
+                </Btn>
+                <Btn className="flex-1" icon={<Users size={16} />} onClick={async () => {
+                   await acceptProblem(p.problem_code);
+                   alert("You have collaborated on this project. The status is now IN PROGRESS!");
+                   getRecommendedProblems().then(data => setProblems(data.problems || []));
+                }}>
+                  Collaborate
+                </Btn>
               </div>
             </Card>
           ))}
+          {problems.length === 0 && (
+            <p className="text-xs col-span-2 text-center py-5" style={{ color: "var(--text-muted)" }}>No recommended projects found right now.</p>
+          )}
         </div>
-      </div>
+      
+          <h2 className="font-bold text-sm mb-3 mt-8" style={{ color: "var(--text)" }}>My Active Projects</h2>
+          {myProjects.length === 0 ? (
+            <p className="text-sm text-center py-4" style={{ color: "var(--text-muted)" }}>No active projects found.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {myProjects.map((c, i) => (
+                <Card key={i} className="p-5">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.description || c.title}</h3>
+                      <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                        <MapPin size={11} /> {c.district || "Location"}
+                      </p>
+                    </div>
+                    <StatusBadge status={c.initiative_status || c.status} />
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <Btn variant="primary" className="text-xs flex-1" onClick={() => {
+                        setReport(curr => ({ ...curr, problemCode: c.problem_code, description: c.description }));
+                        onNav("solver-dashboard");
+                    }}>View Details</Btn>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+</div>
     </div>
   );
 }
 
-// ─── INDUSTRY PROJECT DETAIL ──────────────────────────────────────────────────
+
+
+
+function ImpactReportModal({ isOpen, onClose, reportData }: { isOpen: boolean; onClose: () => void; reportData: any }) {
+  if (!isOpen || !reportData) return null;
+
+  const metrics = (() => {
+    try {
+       return typeof reportData.key_metrics === 'string' ? JSON.parse(reportData.key_metrics) : reportData.key_metrics;
+    } catch(e) { return []; }
+  })();
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <Card className="w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center gap-2 mb-4 text-green-700">
+           <CheckCircle size={24} />
+           <h2 className="text-xl font-bold">Problem Solved Successfully</h2>
+        </div>
+        <h3 className="text-lg font-bold mb-2" style={{ color: "var(--navy)" }}>{reportData.title}</h3>
+        <p className="text-sm mb-4" style={{ color: "var(--text)" }}>{reportData.summary}</p>
+        
+        <h4 className="font-bold text-sm mb-2" style={{ color: "var(--text-muted)" }}>Key Metrics & Impact</h4>
+        <ul className="list-disc pl-5 mb-4 text-sm space-y-1">
+           {metrics && metrics.map((m:string, i:number) => <li key={i}>{m}</li>)}
+        </ul>
+
+        <h4 className="font-bold text-sm mb-2" style={{ color: "var(--text-muted)" }}>Challenges Overcome</h4>
+        <p className="text-sm mb-6 bg-gray-50 p-3 rounded-lg border">{reportData.challenges_overcome}</p>
+
+        <Btn onClick={onClose} className="w-full">Done</Btn>
+      </Card>
+    </div>
+  );
+}
+
+function SolutionModal({ isOpen, onClose, problemCode }: { isOpen: boolean; onClose: () => void; problemCode: string }) {
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <Card className="w-full max-w-lg p-5 flex flex-col max-h-[90vh]">
+        <h2 className="text-xl font-bold mb-3" style={{ color: "var(--navy)" }}>Submit AI Solution</h2>
+        {!result ? (
+          <>
+            <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+              Describe your proposed solution, timeline, and resources needed. Our AI will automatically structure this into a formal proposal and assign the project.
+            </p>
+            <textarea 
+              value={text} 
+              onChange={e => setText(e.target.value)}
+              className="w-full p-3 rounded-xl border flex-1 min-h-[150px] mb-4 text-sm"
+              style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}
+              placeholder="E.g. We will implement an IoT based sensor network over 6 months using  budget..."
+            />
+            <div className="flex gap-2 justify-end">
+              <Btn variant="secondary" onClick={onClose}>Cancel</Btn>
+              <Btn onClick={async () => {
+                if(!text) return;
+                setLoading(true);
+                try {
+                  const res = await submitSolutionAI(problemCode, text);
+                  setResult(res.initiative);
+                } catch(e:any) {
+                  alert("Error: " + e.message);
+                } finally {
+                  setLoading(false);
+                }
+              }}>
+                {loading ? "Processing via AI..." : "Submit Proposal"}
+              </Btn>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-4 overflow-y-auto">
+            <div className="p-4 rounded-xl bg-green-50 border border-green-200">
+              <h3 className="font-bold text-green-800 text-lg mb-1">Solution Structured Successfully!</h3>
+              <p className="text-green-700 text-sm">Status updated to IN_PROGRESS.</p>
+            </div>
+            
+            <div><label className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>AI Generated Title</label>
+            <p className="text-sm font-semibold">{result.initiative_title}</p></div>
+            
+            <div><label className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>Extracted Timeline</label>
+            <p className="text-sm">{result.timeline_display || "Not specified"}</p></div>
+            
+            <div><label className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>Resources Needed</label>
+            <p className="text-sm">{result.expected_impact || "Not specified"}</p></div>
+            
+            <div><label className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>Feasibility Score</label>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden"><div className="h-full bg-amber-500" style={{ width: `${result.feasibility_score}%` }}></div></div>
+              <span className="text-sm font-bold">{result.feasibility_score}/100</span>
+            </div></div>
+
+            <Btn onClick={onClose} className="w-full mt-4">Close & Return</Btn>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function IndustryProjectDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
   return (
