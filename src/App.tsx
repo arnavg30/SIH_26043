@@ -863,6 +863,31 @@ function EmailPasswordAuthForm({
         </div>
       </div>
 
+        {authMode === "signin" && (
+          <div className="flex justify-end mt-1">
+            <button 
+              type="button" 
+              onClick={async () => {
+                if (!email) {
+                  alert("Please enter your email address first");
+                  return;
+                }
+                try {
+                  const { sendPasswordResetEmail } = await import("firebase/auth");
+                  const { auth } = await import("./firebase/config");
+                  await sendPasswordResetEmail(auth, email);
+                  alert("Password reset link sent to " + email);
+                } catch (err: any) {
+                  alert(err.message || "Failed to send reset email");
+                }
+              }}
+              className="text-xs font-semibold hover:underline cursor-pointer" 
+              style={{ color: "var(--amber)" }}
+            >
+              Forgot Password?
+            </button>
+          </div>
+        )}
       {/* Error Alert */}
       {errorMsg && (
         <div className="p-3 rounded-xl flex items-start gap-2 text-xs"
@@ -1612,15 +1637,17 @@ function OrgVictimLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── CITIZEN DASHBOARD ────────────────────────────────────────────────────────
 function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const [problems, setProblems] = useState<any[]>([]);
+  useEffect(() => { getMyProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
   const profile = useProfileDisplay("citizen");
   const mitraGreeting = profile.name
     ? t("mitra.dash.greeting").replace("{name}", profile.name)
     : t("mitra.dash.greeting.generic");
   const statuses = [
-    { icon: <SendHorizontal size={20} />, val: "3", key: "cit.submitted", color: "#1D4ED8" },
-    { icon: <Clock size={20} />, val: "2", key: "cit.underreview", color: "var(--warning)" },
-    { icon: <Activity size={20} />, val: "1", key: "cit.inprogress", color: "var(--green)" },
-    { icon: <CheckCircle size={20} />, val: "1", key: "cit.resolved", color: "var(--success)" },
+    { icon: <SendHorizontal size={20} />, val: problems.length.toString(), key: "cit.submitted", color: "#1D4ED8" },
+    { icon: <Clock size={20} />, val: problems.filter((p: any) => p.status === "PENDING").length.toString(), key: "cit.underreview", color: "var(--warning)" },
+    { icon: <Activity size={20} />, val: problems.filter((p: any) => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length.toString(), key: "cit.inprogress", color: "var(--green)" },
+    { icon: <CheckCircle size={20} />, val: problems.filter((p: any) => p.status === "SOLVED").length.toString(), key: "cit.resolved", color: "var(--success)" },
   ];
   return (
     <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
@@ -1735,12 +1762,14 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── PANCHAYAT DASHBOARD ──────────────────────────────────────────────────────
 function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const [problems, setProblems] = useState<any[]>([]);
+  useEffect(() => { getMyProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
   const profile = useProfileDisplay("panchayat");
   const statuses = [
-    { label: "Total Problems", val: "34", color: "var(--navy)", icon: <Layers size={18} /> },
-    { label: "Under Review", val: "8", color: "var(--warning)", icon: <Clock size={18} /> },
-    { label: "In Progress", val: "12", color: "var(--green)", icon: <Activity size={18} /> },
-    { label: "Resolved", val: "14", color: "var(--success)", icon: <CheckCircle size={18} /> },
+    { label: "Total Problems", val: problems.length.toString(), color: "var(--navy)", icon: <Layers size={18} /> },
+    { label: "Under Review", val: problems.filter((p: any) => p.status === "PENDING").length.toString(), color: "var(--warning)", icon: <Clock size={18} /> },
+    { label: "In Progress", val: problems.filter((p: any) => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length.toString(), color: "var(--green)", icon: <Activity size={18} /> },
+    { label: "Resolved", val: problems.filter((p: any) => p.status === "SOLVED").length.toString(), color: "var(--success)", icon: <CheckCircle size={18} /> },
   ];
 
   return (
@@ -1828,12 +1857,14 @@ function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 function OrgVictimDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const [problems, setProblems] = useState<any[]>([]);
+  useEffect(() => { getMyProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
   const profile = useProfileDisplay("localorg");
   const statuses = [
-    { label: "Total Reported", val: "12", color: "var(--navy)", icon: <FileText size={18} /> },
-    { label: "Pending Review", val: "2", color: "var(--warning)", icon: <Clock size={18} /> },
-    { label: "In Progress", val: "3", color: "var(--green)", icon: <Activity size={18} /> },
-    { label: "Resolved", val: "7", color: "var(--success)", icon: <CheckCircle size={18} /> },
+    { label: "Total Reported", val: problems.length.toString(), color: "var(--navy)", icon: <FileText size={18} /> },
+    { label: "Pending Review", val: problems.filter((p: any) => p.status === "PENDING").length.toString(), color: "var(--warning)", icon: <Clock size={18} /> },
+    { label: "In Progress", val: problems.filter((p: any) => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length.toString(), color: "var(--green)", icon: <Activity size={18} /> },
+    { label: "Resolved", val: problems.filter((p: any) => p.status === "SOLVED").length.toString(), color: "var(--success)", icon: <CheckCircle size={18} /> },
   ];
 
   return (
