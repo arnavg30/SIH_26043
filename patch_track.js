@@ -1,0 +1,1 @@
+const fs = require('fs'); let c = fs.readFileSync('src/App.tsx', 'utf8'); c = c.split('onClick={() => onNav(\\'tracking\\')}').join('onClick={() => { if(typeof p !== \\'undefined\\') setSelectedTrackingId(p.id || p.problem_code); onNav(\\'tracking\\'); }}'); fs.writeFileSync('src/App.tsx', c);

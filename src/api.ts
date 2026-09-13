@@ -248,3 +248,7 @@ export async function getNotifications() {
 export async function markNotificationRead(id: number) {
   return apiFetch(`/api/notifications/${id}/read`, { method: 'PATCH' });
 }
+
+export async function getProblemByCode(code: string) {
+  return apiFetch(`/api/problems/${code}`);
+}

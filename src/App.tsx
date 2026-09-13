@@ -305,8 +305,10 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
 
   useEffect(() => {
-    getRecommendedProblems().then(data => { if(data) setRecommended(data.problems || []); }).catch(console.error);
-    getMyProblems().then(data => { if(data) setMyProjects(data.problems || []); }).catch(console.error);
+    import('./api').then(({ getRecommendedProblems, getMyProblems }) => {
+      getRecommendedProblems().then(data => { if(data) setRecommended(data.problems || []); }).catch(console.error);
+      getMyProblems().then(data => { if(data) setMyProjects(data.problems || []); }).catch(console.error);
+    });
   }, []);
 
   if (selectedFilter) {
@@ -321,13 +323,13 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
-              <GraduationCap size={22} /> {t("uni.dashboard")}
+              <School size={22} /> {t("uni.dashboard")}
             </h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{profile.name || "University"} {profile.detail ? `— ${profile.detail}` : ""}</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{profile.name}</p>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
@@ -342,31 +344,40 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
           ))}
         </div>
         
-        <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Recommended Challenges</h3>
+        <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Recommended Challenges (AI Matched)</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           {recommended.slice(0, 4).map((c, i) => (
              <Card key={i} className="p-5 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(c.problem_code); onNav("uni-challenge-detail"); }}>
-               <div className="flex items-start justify-between mb-2">
+               <div className="flex items-start justify-between mb-3">
                  <div className="flex-1">
                    <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.title || c.description}</h3>
                    <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
                      <MapPin size={11} /> {[c.village, c.block, c.district].filter(Boolean).join(", ")}
                    </p>
                  </div>
-                 <StatusBadge status={c.status === "SUBMITTED" ? "submitted" : "under-review"} />
+                 <div className="text-right">
+                    <div className="font-black text-xl sm:text-2xl" style={{ color: "var(--success)" }}>{c.match_percentage || 85}%</div>
+                    <div className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>AI MATCH</div>
+                 </div>
                </div>
-               <div className="flex gap-2 mb-3 flex-wrap">
-                 <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{c.category_name}</span>
+               
+               <div className="mb-3 space-y-1">
+                 {(c.match_reasons || ["Profile matches requirements", "High AI Alignment Score"]).map((r: string, idx: number) => (
+                   <p key={idx} className="text-xs flex items-center gap-1.5 font-medium" style={{ color: "var(--success)" }}>
+                     <CheckCircle size={11} className="shrink-0" /> {r}
+                   </p>
+                 ))}
                </div>
+
                <div className="flex gap-2">
                  <Btn onClick={(e) => { e.stopPropagation(); setSelectedTrackingId(c.problem_code); onNav("uni-challenge-detail"); }} variant="ghost" className="flex-1 text-xs">View Details</Btn>
                </div>
              </Card>
           ))}
-          {recommended.length === 0 && <div className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>No recommended challenges found.</div>}
+          {recommended.length === 0 && <div className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>No AI recommendations yet. Please update your profile description.</div>}
         </div>
-
-        <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Our Active Projects</h3>
+        
+        <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Active Projects</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").map((c, i) => (
              <Card key={i} className="p-5 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(c.problem_code); onNav("project-lifecycle"); }}>
@@ -393,57 +404,7 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
     </div>
   );
 }
-import { useState, useEffect, useRef, createContext, useContext } from "react";
-import {
-  Sun, Moon, Globe, ChevronRight, MapPin, Mic, MicOff, Keyboard, Paperclip,
-  Camera, Upload, Video, Bell, User, Users, Building2, GraduationCap,
-  Briefcase, Home, FileText, Map, Navigation, CheckCircle, Clock,
-  AlertTriangle, XCircle, Loader, Search, Filter, ArrowLeft, ArrowRight,
-  Phone, MessageSquare, Star, Settings, LogOut, Menu, X, TrendingUp,
-  Layers, Heart, BookOpen, Lightbulb, Shield, AlertCircle, ChevronDown,
-  BarChart3, PieChart, Activity, Leaf, Droplets, Zap, Wheat, Stethoscope,
-  School, Trash2, ThumbsUp, SendHorizontal, RefreshCw, Eye, EyeOff, Lock,
-  ClipboardList, HelpCircle, Volume2, UserCheck, Building, Factory, Edit2, Mail,
-} from "lucide-react";
-import { type Lang, LANG_NAMES, makeT } from "./i18n";
-import CameraCaptureModal from "./components/CameraCaptureModal";
-import { NavJharLogo } from "./components/NavJharLogo";
-import { MitraAssistant } from "./components/MitraAssistant";
-import LocationPickerMap from "./components/LocationPickerMap";
-import RecordedAudioPlayer from "./components/RecordedAudioPlayer";
-import useVoiceRecording from "./hooks/useVoiceRecording";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, reload, signOut, sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "./firebase/config";
-import {
-  syncAuth, getProfileMe,
-  saveCitizenProfile, savePanchayatProfile, saveLocalOrgProfile,
-  saveOrgProfile, saveIndustryProfile, saveUniProfile, submitProblem,
-  geocodeProblemAddress, analyzeProblemAI,
-  getRecommendedProblems, getMyProblems, acceptProblem, submitSolutionAI, markSolved, transcribeAudio
-} from "./api";
 
-// ─── Context ─────────────────────────────────────────────────────────────────
-interface AppCtx {
-  lang: Lang;
-  setLang: (l: Lang) => void;
-  dark: boolean;
-  setDark: (d: boolean) => void;
-  t: (key: string) => string;
-  role: string;
-  setRole: (r: string) => void;
-  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; audioDurationSeconds: number; latitude: string; longitude: string; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string; aiAnalysis: any; impactReport: any; status: string | undefined };
-  setReport: React.Dispatch<React.SetStateAction<AppCtx["report"]>>;
-}
-const Ctx = createContext<AppCtx>({
-  lang: "en", setLang: () => {}, dark: false, setDark: () => {}, t: (k) => k,
-  role: "citizen", setRole: () => {},
-  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null, impactReport: null, status: undefined }, setReport: () => {},
-});
-const useApp = () => useContext(Ctx);
-const isValidMobile = (value: string) => /^\d{10}$/.test(value.replace(/\D/g, ""));
-
-
-type ProfileDisplay = { name: string; detail: string };
 function useProfileDisplay(role: string): ProfileDisplay {
   const [display, setDisplay] = useState<ProfileDisplay>({ name: "", detail: "" });
   useEffect(() => {
@@ -2666,13 +2627,14 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Domain <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input
+                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--text)" }}>Organization Profile Description (AI Analyzed) <span style={{ color: "var(--error)" }}>*</span></label>
+                  <textarea
                     required
                     value={domain}
                     onChange={e => setDomain(e.target.value)}
-                    placeholder="e.g. Education, Healthcare, Water Management, Rural Development..."
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
+                    rows={3}
+                    placeholder="Describe your organization capabilities. AI will automatically match you with relevant problems."
+                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none resize-none"
                     style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
                   />
                 </div>
@@ -2714,9 +2676,9 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
 
   useEffect(() => {
-    getRecommendedProblems().then(data => { if(data) setRecommended(data.problems || []); }).catch(console.error);
-    getMyProblems().then(data => { if(data) setMyProjects(data.problems || []); }).catch(console.error);
-    import('./api').then(({ getStats }) => {
+    import('./api').then(({ getRecommendedProblems, getMyProblems, getStats }) => {
+      getRecommendedProblems().then(data => { if(data) setRecommended(data.problems || []); }).catch(console.error);
+      getMyProblems().then(data => { if(data) setMyProjects(data.problems || []); }).catch(console.error);
       getStats().then(data => { if (data && data.success) setStats(data); }).catch(console.error);
     });
   }, []);
@@ -2726,2153 +2688,694 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
     if (selectedFilter.filterStr === "IN_PROGRESS") fp = myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED");
     else if (selectedFilter.filterStr === "SOLVED") fp = myProjects.filter(p => p.status === "SOLVED");
     else if (selectedFilter.filterStr === "SUBMITTED") fp = recommended.filter(p => p.status === "SUBMITTED" || p.status === "PENDING" || p.status === "UNDER_REVIEW");
-    else fp = myProjects.concat(recommended);
+    
     return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
   }
 
   return (
-    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       <NavBar role="org-solver" screen="org-solver-dashboard" onNav={onNav} />
-      <div className="px-4 pt-5 pb-4" style={{ background: "var(--nav-bg)" }}>
-        <h1 className="text-xl font-black text-white">{t("org.dashboard")}</h1>
-        <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>{profile.name || "Organisation"} {profile.detail ? `- ${profile.detail}` : `- ${t("org.subtitle")}`}</p>
-      </div>
-      <div className="max-w-3xl mx-auto px-4 py-5 space-y-4">
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
+              <Building2 size={22} /> {t("ngo.dashboard")}
+            </h1>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{profile.name}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           {[
-            { icon: <Layers size={18} />, label: t("org.recommended"), value: recommended.length.toString(), color: "var(--amber)", filterStr: "SUBMITTED" },
-            { icon: <Briefcase size={18} />, label: t("org.collabs"), value: myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length.toString(), color: "var(--green)", filterStr: "IN_PROGRESS" },
-            { icon: <CheckCircle size={18} />, label: t("org.completed"), value: myProjects.filter(p => p.status === "SOLVED").length.toString(), color: "var(--success)", filterStr: "SOLVED" },
-            { icon: <Users size={18} />, label: t("org.reach"), value: stats.benefited >= 1000 ? (stats.benefited / 1000).toFixed(1) + "K" : stats.benefited.toString(), color: "var(--navy)", filterStr: "ALL" },
+            { icon: <Bell size={18} />, label: "Recommended", value: recommended.length.toString(), color: "var(--amber)", filterStr: "SUBMITTED" },
+            { icon: <Activity size={18} />, label: "Active", value: myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length.toString(), color: "var(--navy)", filterStr: "IN_PROGRESS" },
+            { icon: <ThumbsUp size={18} />, label: "Resolved", value: myProjects.filter(p => p.status === "SOLVED").length.toString(), color: "var(--success)", filterStr: "SOLVED" },
+            { icon: <Users size={18} />, label: "Benefited", value: stats.benefited.toString(), color: "#7C3AED", filterStr: "" },
           ].map(k => (
-            <div key={k.label} onClick={() => setSelectedFilter({ title: k.label, color: k.color, filterStr: k.filterStr })} className="cursor-pointer active:scale-95 transition-all">
-              <KPICard icon={k.icon} label={k.label} value={k.value} color={k.color} />
-            </div>
+             <div key={k.label} className={k.filterStr ? "cursor-pointer active:scale-95 transition-all" : ""} onClick={() => k.filterStr && setSelectedFilter({ title: k.label, color: k.color, filterStr: k.filterStr })}>
+               <KPICard icon={k.icon} label={k.label} value={k.value} color={k.color} />
+             </div>
           ))}
         </div>
         
-        {/* Core Actions */}
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => onNav("uni-dashboard")} className="p-3 rounded-xl flex items-center justify-center gap-2 font-semibold text-sm transition-all card-hover" style={{ background: "var(--navy)", color: "white" }}>
-            <Search size={16} /> {t("org.find_problems")}
-          </button>
-          <button onClick={() => onNav("partnership-form")} className="p-3 rounded-xl flex items-center justify-center gap-2 font-semibold text-sm transition-all card-hover" style={{ background: "var(--green)", color: "white" }}>
-            <SendHorizontal size={16} /> {t("org.support")}
-          </button>
-        </div>
-
-        {/* Top Recommended Challenges */}
-        <h3 className="font-bold text-sm mt-6 mb-2" style={{ color: "var(--text)" }}>{t("org.recommended")}</h3>
-        <div className="space-y-3">
-          {recommended.slice(0, 3).map((c, i) => (
-             <Card key={i} className="p-4 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(c.problem_code); onNav("uni-challenge-detail"); }}>
-               <div className="flex justify-between items-start mb-2">
-                 <div>
-                   <h4 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.title || c.description}</h4>
-                   <p className="text-xs" style={{ color: "var(--text-muted)" }}><MapPin size={10} className="inline mr-1"/> {[c.village, c.block, c.district].filter(Boolean).join(", ")}</p>
+        <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>AI Recommended Complaints</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          {recommended.slice(0, 4).map((c, i) => (
+             <Card key={i} className="p-5 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(c.problem_code); onNav("uni-challenge-detail"); }}>
+               <div className="flex items-start justify-between mb-3">
+                 <div className="flex-1">
+                   <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.title || c.description}</h3>
+                   <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                     <MapPin size={11} /> {[c.village, c.block, c.district].filter(Boolean).join(", ")}
+                   </p>
                  </div>
-                 <StatusBadge status={c.status === "SUBMITTED" ? "submitted" : "under-review"} />
-               </div>
-             </Card>
-          ))}
-          {recommended.length === 0 && <div className="text-sm" style={{ color: "var(--text-muted)" }}>No recommendations right now.</div>}
-        </div>
-
-        {/* Our Active Projects */}
-        <h3 className="font-bold text-sm mt-6 mb-2" style={{ color: "var(--text)" }}>Our Projects</h3>
-        <div className="space-y-3">
-          {myProjects.slice(0, 3).map((c, i) => (
-             <Card key={i} className="p-4 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(c.problem_code); onNav("project-lifecycle"); }}>
-               <div className="flex justify-between items-start mb-2">
-                 <div>
-                   <h4 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.title || c.description}</h4>
-                   <p className="text-xs" style={{ color: "var(--text-muted)" }}><MapPin size={10} className="inline mr-1"/> {[c.village, c.block, c.district].filter(Boolean).join(", ")}</p>
+                 <div className="text-right">
+                    <div className="font-black text-xl sm:text-2xl" style={{ color: "var(--success)" }}>{c.match_percentage || 82}%</div>
+                    <div className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>AI MATCH</div>
                  </div>
-                 <StatusBadge status={c.status === "SOLVED" ? "resolved" : "in-progress"} />
                </div>
-             </Card>
-          ))}
-          {myProjects.length === 0 && <div className="text-sm" style={{ color: "var(--text-muted)" }}>No active projects.</div>}
-        </div>
-      </div>
-    </div>
-  );
-}
-function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, lang } = useApp();
-  const [step, setStep] = useState<"email" | "verify" | "profile">("email");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+               
+               <div className="mb-3 space-y-1">
+                 {(c.match_reasons || ["Matches capabilities", "Semantic Alignment: High"]).map((r: string, idx: number) => (
+                   <p key={idx} className="text-xs flex items-center gap-1.5 font-medium" style={{ color: "var(--success)" }}>
+                     <CheckCircle size={11} className="shrink-0" /> {r}
+                   </p>
+                 ))}
+               </div>
 
-  // Profile Form State
-  const [uniName, setUniName] = useState("");
-  const [aisheCode, setAisheCode] = useState("");
-  const [spocName, setSpocName] = useState("");
-  const [spocPhone, setSpocPhone] = useState("");
-  const [uniAddress, setUniAddress] = useState("");
-  const [expertise, setExpertise] = useState("Civil Engineering, IoT, Water Management");
-
-  const finishVerifiedAuthentication = async () => {
-    await syncAuth("UNIVERSITY", lang);
-    try { const pRes = await getProfileMe(); if (pRes?.profile) return onNav("uni-dashboard"); } catch { /* New profile. */ }
-    setStep("profile");
-  };
-  const handleAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg("");
-    if (!email.trim() || !password) {
-      setErrorMsg("Please enter both email and password.");
-      return;
-    }
-    if (password.length < 6) {
-      setErrorMsg("Password must be at least 6 characters.");
-      return;
-    }
-    setLoading(true);
-    try {
-      if (authMode === "signup") {
-          const { checkEmailExists } = await import("./api");
-          await checkEmailExists(email.trim());
-          await createUserWithEmailAndPassword(auth, email.trim(), password);
-      } else {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
-      }
-      const user = auth.currentUser;
-      if (!user) throw new Error("Firebase user is unavailable.");
-      if (!user.emailVerified) { if (authMode === "signup") await sendEmailVerification(user); setStep("verify"); return; }
-      await finishVerifiedAuthentication();
-    } catch (err: any) {
-      console.error("Uni Auth Error:", err);
-      let msg = err.message || "Authentication failed.";
-      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
-        msg = "Invalid email or password. If new, please click 'Create Account'.";
-      } else if (err.code === "auth/email-already-in-use") {
-        msg = "This institutional email is already registered. Please sign in.";
-      } else if (err.code === "auth/invalid-email") {
-        msg = "Please enter a valid email address.";
-      } else if (err.code === "auth/weak-password") {
-        msg = "Password should be at least 6 characters.";
-      }
-      setErrorMsg(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleProfileSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!uniName.trim() || !spocName.trim() || !uniAddress.trim() || !isValidMobile(spocPhone)) {
-      setErrorMsg("Fill all required fields and enter a valid 10-digit mobile number.");
-      return;
-    }
-    setLoading(true);
-    setErrorMsg("");
-    try {
-      await saveUniProfile({
-        universityName: uniName,
-        aisheCode,
-        spocName,
-        spocNumber: spocPhone,
-        officialEmail: email,
-        institutionalAddress: uniAddress,
-        domainExpertise: expertise,
-      });
-      onNav("uni-dashboard");
-    } catch (err: any) {
-      console.error("Uni Profile Save Error:", err);
-      setErrorMsg(err.message || "Failed to save university profile.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
-      {/* Top Header with Logo at Top-Left Corner */}
-      <SimpleNavHeader 
-        onBack={() => {
-          if (step === "profile" || step === "verify") setStep("email");
-          else onNav("solver-select");
-        }} 
-        onNav={onNav} 
-      />
-
-      {/* Main Content Centered */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-6">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-sm"
-              style={{ background: "var(--navy)" }}>
-              <GraduationCap size={24} color="var(--amber)" />
-            </div>
-            <h1 className="text-xl font-black" style={{ color: "var(--text)" }}>
-              {step === "email" ? t("uni.verify_email_title") : t("uni.profile_setup")}
-            </h1>
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              {step === "email" ? "Professional Institutional Email Authentication" : "Professional & Academic Institution Registration"}
-            </p>
-          </div>
-
-          {/* Step Indicator */}
-          <div className="flex gap-2 mb-5">
-            <div className="flex-1 h-1.5 rounded-full" style={{ background: "var(--navy)" }} />
-            <div className="flex-1 h-1.5 rounded-full" style={{ background: step === "profile" ? "var(--navy)" : "var(--border)" }} />
-          </div>
-
-          <div className="rounded-2xl border p-6 shadow-sm" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-            {step === "email" && (
-              <EmailPasswordAuthForm
-                email={email}
-                setEmail={setEmail}
-                password={password}
-                setPassword={setPassword}
-                authMode={authMode}
-                setAuthMode={setAuthMode}
-                showPassword={showPassword}
-                setShowPassword={setShowPassword}
-                loading={loading}
-                errorMsg={errorMsg}
-                onSubmit={handleAuthSubmit}
-                emailPlaceholder="e.g. registrar@bitmesra.ac.in"
-                emailLabel="Institutional Official Email"
-                emailHint="Please enter your official university / college email address."
-              />
-            )}
-            {step === "verify" && <EmailVerificationGate email={email} onVerified={finishVerifiedAuthentication} onBack={() => setStep("email")} />}
-
-            {step === "profile" && (
-              <form onSubmit={handleProfileSubmit} className="space-y-3.5">
-                <div className="p-2.5 rounded-xl flex items-center gap-2" style={{ background: "var(--success-bg)" }}>
-                  <CheckCircle size={16} color="var(--success)" />
-                  <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
-                    Authenticated: {email}
-                  </span>
-                </div>
-
-                <h2 className="font-bold mb-2 text-base flex items-center gap-2" style={{ color: "var(--text)" }}>
-                  <GraduationCap size={18} style={{ color: "var(--navy)" }} /> Institution Profile
-                </h2>
-
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    University / Institute Name <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    required
-                    value={uniName}
-                    onChange={e => setUniName(e.target.value)}
-                    placeholder="e.g. BIT Mesra"
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    AISHE Code (Optional)
-                  </label>
-                  <input
-                    value={aisheCode}
-                    onChange={e => setAisheCode(e.target.value)}
-                    placeholder="e.g. U-0294"
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    SPOC Name <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    required
-                    value={spocName}
-                    onChange={e => setSpocName(e.target.value)}
-                    placeholder="Single Point of Contact / Dean R&D name"
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="px-3 py-2 rounded-xl text-sm font-medium border"
-                      style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
-                    <input
-                      type="tel"
-                      required
-                      pattern="[0-9]{10}"
-                      value={spocPhone}
-                      maxLength={10}
-                      inputMode="numeric"
-                      onChange={e => setSpocPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      placeholder="98765 43210"
-                      className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none"
-                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    University Address <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    required
-                    value={uniAddress}
-                    onChange={e => setUniAddress(e.target.value)}
-                    placeholder="Full institutional campus address"
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div className="mb-2">
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    Expertise Areas <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    required
-                    value={expertise}
-                    onChange={e => setExpertise(e.target.value)}
-                    placeholder="e.g. Civil Engineering, Water Management, IoT, Agriculture..."
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                {errorMsg && (
-                  <div className="p-2.5 rounded-xl flex items-center gap-2 text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>
-                    <AlertCircle size={14} /> {errorMsg}
-                  </div>
-                )}
-                <Btn type="submit" disabled={loading} className="w-full mt-3 py-3 cursor-pointer" icon={loading ? <Loader size={16} className="animate-spin" /> : <CheckCircle size={16} />}>
-                  {loading ? "Saving Profile..." : "Register & Continue"}
-                </Btn>
-              </form>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, lang } = useApp();
-  const [step, setStep] = useState<"email" | "verify" | "profile">("email");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  // Profile Form State
-  const [indName, setIndName] = useState("");
-  const [spocName, setSpocName] = useState("");
-  const [spocPhone, setSpocPhone] = useState("");
-  const [indType, setIndType] = useState("IoT & Hardware");
-  const [indAddress, setIndAddress] = useState("");
-  const [expertise, setExpertise] = useState("IoT, AgriTech, Manufacturing");
-  const [csrBudget, setCsrBudget] = useState("500000");
-
-  const finishVerifiedAuthentication = async () => {
-    await syncAuth("INDUSTRY", lang);
-    try { const pRes = await getProfileMe(); if (pRes?.profile) return onNav("industry-dashboard"); } catch { /* New profile. */ }
-    setStep("profile");
-  };
-  const handleAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg("");
-    if (!email.trim() || !password) {
-      setErrorMsg("Please enter both email and password.");
-      return;
-    }
-    if (password.length < 6) {
-      setErrorMsg("Password must be at least 6 characters.");
-      return;
-    }
-    setLoading(true);
-    try {
-      if (authMode === "signup") {
-          const { checkEmailExists } = await import("./api");
-          await checkEmailExists(email.trim());
-          await createUserWithEmailAndPassword(auth, email.trim(), password);
-      } else {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
-      }
-      const user = auth.currentUser;
-      if (!user) throw new Error("Firebase user is unavailable.");
-      if (!user.emailVerified) { if (authMode === "signup") await sendEmailVerification(user); setStep("verify"); return; }
-      await finishVerifiedAuthentication();
-    } catch (err: any) {
-      console.error("Industry Auth Error:", err);
-      let msg = err.message || "Authentication failed.";
-      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
-        msg = "Invalid email or password. If new, please click 'Create Account'.";
-      } else if (err.code === "auth/email-already-in-use") {
-        msg = "This corporate email is already registered. Please sign in.";
-      } else if (err.code === "auth/invalid-email") {
-        msg = "Please enter a valid email address.";
-      } else if (err.code === "auth/weak-password") {
-        msg = "Password should be at least 6 characters.";
-      }
-      setErrorMsg(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleProfileSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!indName.trim() || !spocName.trim() || !indAddress.trim() || !isValidMobile(spocPhone)) {
-      setErrorMsg("Fill all required fields and enter a valid 10-digit mobile number.");
-      return;
-    }
-    setLoading(true);
-    setErrorMsg("");
-    try {
-      await saveIndustryProfile({
-        industryName: indName,
-        industryType: indType,
-        spocName,
-        phoneNumber: spocPhone,
-        officialEmail: email,
-        companyAddress: indAddress,
-        domainExpertise: expertise,
-        csrBudgetAvailable: csrBudget ? Number(csrBudget) : undefined,
-      });
-      onNav("industry-dashboard");
-    } catch (err: any) {
-      console.error("Industry Profile Save Error:", err);
-      setErrorMsg(err.message || "Failed to save industry profile.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
-      {/* Top Header with Logo at Top-Left Corner */}
-      <SimpleNavHeader 
-        onBack={() => {
-          if (step === "profile" || step === "verify") setStep("email");
-          else onNav("solver-select");
-        }} 
-        onNav={onNav} 
-      />
-
-      {/* Main Content Centered */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-6">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-sm"
-              style={{ background: "var(--navy)" }}>
-              <Factory size={24} color="var(--amber)" />
-            </div>
-            <h1 className="text-xl font-black" style={{ color: "var(--text)" }}>
-              {step === "email" ? t("ind.verify_email_title") : t("ind.profile_setup")}
-            </h1>
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              {step === "email" ? "Corporate Partner Email Authentication" : "Professional Industry Partner Onboarding"}
-            </p>
-          </div>
-
-          {/* Step Indicator */}
-          <div className="flex gap-2 mb-5">
-            <div className="flex-1 h-1.5 rounded-full" style={{ background: "var(--navy)" }} />
-            <div className="flex-1 h-1.5 rounded-full" style={{ background: step === "profile" ? "var(--navy)" : "var(--border)" }} />
-          </div>
-
-          <div className="rounded-2xl border p-6 shadow-sm" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-            {step === "email" && (
-              <EmailPasswordAuthForm
-                email={email}
-                setEmail={setEmail}
-                password={password}
-                setPassword={setPassword}
-                authMode={authMode}
-                setAuthMode={setAuthMode}
-                showPassword={showPassword}
-                setShowPassword={setShowPassword}
-                loading={loading}
-                errorMsg={errorMsg}
-                onSubmit={handleAuthSubmit}
-                emailPlaceholder="e.g. contact@techgrow.com"
-                emailLabel={t("ind.official_email") || "Official Corporate Email"}
-                emailHint="Please enter your official corporate/organization email."
-              />
-            )}
-            {step === "verify" && <EmailVerificationGate email={email} onVerified={finishVerifiedAuthentication} onBack={() => setStep("email")} />}
-
-            {step === "profile" && (
-              <form onSubmit={handleProfileSubmit} className="space-y-3.5">
-                <div className="p-2.5 rounded-xl flex items-center gap-2" style={{ background: "var(--success-bg)" }}>
-                  <CheckCircle size={16} color="var(--success)" />
-                  <span className="text-xs font-semibold" style={{ color: "var(--success)" }}>
-                    Authenticated: {email}
-                  </span>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    Industry / Corporate Name <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    required
-                    value={indName}
-                    onChange={e => setIndName(e.target.value)}
-                    placeholder="e.g. TechGrow Solutions Pvt. Ltd."
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    Industry Category / Type
-                  </label>
-                  <input
-                    value={indType}
-                    onChange={e => setIndType(e.target.value)}
-                    placeholder="e.g. IoT, AgriTech, Manufacturing..."
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    SPOC Name <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    required
-                    value={spocName}
-                    onChange={e => setSpocName(e.target.value)}
-                    placeholder="Single Point of Contact name"
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    <Phone size={12} className="inline mr-1" /> SPOC Contact Number <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="px-3 py-2 rounded-xl text-sm font-medium border"
-                      style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}>+91</div>
-                    <input
-                      type="tel"
-                      required
-                      pattern="[0-9]{10}"
-                      value={spocPhone}
-                      maxLength={10}
-                      inputMode="numeric"
-                      onChange={e => setSpocPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      placeholder="98765 43210"
-                      className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none"
-                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    Company Address <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    required
-                    value={indAddress}
-                    onChange={e => setIndAddress(e.target.value)}
-                    placeholder="Registered corporate address"
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    Expertise Areas <span style={{ color: "var(--error)" }}>*</span>
-                  </label>
-                  <input
-                    required
-                    value={expertise}
-                    onChange={e => setExpertise(e.target.value)}
-                    placeholder="e.g. IoT, AgriTech, Water Technology, Hardware..."
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    CSR / Innovation Budget Available (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={csrBudget}
-                    onChange={e => setCsrBudget(e.target.value)}
-                    placeholder="e.g. 500000"
-                    className="w-full px-3 py-2 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-
-                {errorMsg && (
-                  <div className="p-2.5 rounded-xl flex items-center gap-2 text-xs" style={{ background: "var(--error-bg)", color: "var(--error)" }}>
-                    <AlertCircle size={14} /> {errorMsg}
-                  </div>
-                )}
-
-                <Btn type="submit" disabled={loading} className="w-full mt-2 py-3 cursor-pointer" icon={loading ? <Loader size={16} className="animate-spin" /> : <CheckCircle size={16} />}>
-                  {loading ? "Saving Profile..." : "Register & Enter"}
-                </Btn>
-              </form>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── REPORT STEP 1 ────────────────────────────────────────────────────────────
-function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, role } = useApp();
-  const { report, setReport } = useApp();
-  const desc = report.description;
-  const setDesc = (description: string) => setReport(current => ({ ...current, description }));
-  const [mode, setMode] = useState<"none" | "voice" | "text">(() => report.files.some(file => file.type.startsWith("audio/")) ? "voice" : "none");
-  const selCat = report.category || null;
-  const setSelCat = (category: string | null) => setReport(current => ({ ...current, category: category || "", categoryId: category ? String(cats.findIndex(item => item.label === category) + 1) : "" }));
-  const imageInput = useRef<HTMLInputElement>(null);
-  const videoInput = useRef<HTMLInputElement>(null);
-  const cameraInput = useRef<HTMLInputElement>(null);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-    const [isTranscribing, setIsTranscribing] = useState(false);
-
-  const handleCapturePhoto = (file: File) => {
-    const previewUrl = URL.createObjectURL(file);
-    setReport(current => ({
-      ...current,
-      evidence: "Photo upload",
-      files: [...current.files, file],
-      previews: [...current.previews, previewUrl],
-    }));
-  };
-
-  const removeAttachment = (indexToRemove: number) => {
-    setReport(current => {
-      const removedPreview = current.previews[indexToRemove];
-      if (removedPreview && removedPreview.startsWith("blob:")) {
-        try { URL.revokeObjectURL(removedPreview); } catch (_) {}
-      }
-      const newFiles = current.files.filter((_, idx) => idx !== indexToRemove);
-      const newPreviews = current.previews.filter((_, idx) => idx !== indexToRemove);
-      const remainingAudio = newFiles.find(f => f.type.startsWith("audio/"));
-      return {
-        ...current,
-        files: newFiles,
-        previews: newPreviews,
-        audioDurationSeconds: remainingAudio ? current.audioDurationSeconds : 0,
-        evidence: newFiles.length > 0 ? current.evidence : "",
-      };
-    });
-  };
-
-  const handleTakePhotoClick = () => {
-    if (report.files.length >= 10) return;
-    if (navigator.mediaDevices && "getUserMedia" in navigator.mediaDevices) {
-      setIsCameraOpen(true);
-    } else if (cameraInput.current) {
-      cameraInput.current.click();
-    } else if (imageInput.current) {
-      imageInput.current.click();
-    }
-  };
-  const recordedAudio = report.files.find(file => file.type.startsWith("audio/"));
-  const recording = useVoiceRecording((file, duration) => {
-    setReport(current => {
-      const retained = current.files.map((item, index) => ({ file: item, preview: current.previews[index] }))
-        .filter(item => !item.file.type.startsWith("audio/"));
-      return {
-        ...current, evidence: "Voice recording", audioDurationSeconds: duration,
-        files: [...retained.map(item => item.file), file],
-        previews: [...retained.map(item => item.preview), ""],
-      };
-    });
-  });
-  const listening = recording.status === "recording";
-  const recordingError = recording.error;
-  const recordingSeconds = recording.seconds;
-  const stopRecording = recording.stop;
-  const startRecording = () => {
-    if (!recordedAudio && report.files.length >= 10) return;
-    return recording.start();
-  };
-  const addMedia = (files: FileList | null, evidence: string) => {
-    if (!files?.length) return;
-    const selected = Array.from(files).slice(0, Math.max(0, 10 - report.files.length));
-    const previews = selected.map(file => URL.createObjectURL(file));
-    setReport(current => ({ ...current, evidence, files: [...current.files, ...selected], previews: [...current.previews, ...previews] }));
-  };
-
-  const cats = [
-    { icon: <Wheat size={18} />, label: "Agriculture" },
-    { icon: <Droplets size={18} />, label: "Water" },
-    { icon: <Stethoscope size={18} />, label: "Healthcare" },
-    { icon: <School size={18} />, label: "Education" },
-    { icon: <Navigation size={18} />, label: "Roads" },
-    { icon: <Trash2 size={18} />, label: "Sanitation" },
-    { icon: <Leaf size={18} />, label: "Environment" },
-    { icon: <Zap size={18} />, label: "Electricity" },
-    { icon: <Building size={18} />, label: "Public Services" },
-    { icon: <Layers size={18} />, label: "Other" },
-  ];
-
-  const StepDots = () => (
-    <div className="flex items-center gap-1">
-      {[1, 2, 3].map(s => (
-        <div key={s} className="flex items-center gap-1">
-          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-            style={{
-              background: s === 1 ? "var(--amber)" : "rgba(255,255,255,0.2)",
-              color: s === 1 ? "var(--navy)" : "rgba(255,255,255,0.5)"
-            }}>{s}</div>
-          {s < 3 && <div className="w-5 h-0.5" style={{ background: "rgba(255,255,255,0.2)" }} />}
-        </div>
-      ))}
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
-      <div className="sticky top-0 z-10 px-4 py-4" style={{ background: "var(--nav-bg)" }}>
-        <div className="flex items-center justify-between mb-3">
-          <button onClick={() => onNav(getHomeDashboard(role))} className="flex items-center gap-1 text-sm"
-            style={{ color: "rgba(255,255,255,0.7)" }}>
-            <ArrowLeft size={15} /> {t("btn.back")}
-          </button>
-          <StepDots />
-          <div className="w-14" />
-        </div>
-        <h1 className="text-xl font-black text-white">{t("rep.step1.title")}</h1>
-      </div>
-
-      <div className="px-4 py-5">
-        {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
-        {role === "citizen" && (
-          <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
-            <MitraAssistant
-              size="compact"
-              variant="compact"
-              message={listening ? t("mitra.rep.step1.listening") : t("mitra.rep.step1")}
-              subMessage={listening ? "बोलना जारी रखें..." : "Tap mic to speak or select category below"}
-            />
-          </div>
-        )}
-
-        <h2 className="font-semibold text-sm mb-3" style={{ color: "var(--text)" }}>
-          {t("rep.step1.category")}
-        </h2>
-        <div className="grid grid-cols-5 gap-2 mb-6">
-          {cats.map(c => (
-            <button key={c.label} onClick={() => setSelCat(selCat === c.label ? null : c.label)}
-              className="flex flex-col items-center p-2 rounded-xl border-2 transition-all active:scale-95"
-              style={{
-                borderColor: selCat === c.label ? "var(--green)" : "var(--border)",
-                background: selCat === c.label ? "var(--success-bg)" : "var(--card)",
-                color: selCat === c.label ? "var(--green)" : "var(--text-muted)"
-              }}>
-              {c.icon}
-              <span className="text-xs mt-1 text-center leading-tight"
-                style={{ fontSize: "9px", color: "var(--text)" }}>{c.label}</span>
-            </button>
-          ))}
-        </div>
-
-        <h2 className="font-semibold text-sm mb-3" style={{ color: "var(--text)" }}>
-          {t("rep.step1.describe")} <span style={{ color: "var(--error)" }}>*</span>
-        </h2>
-        <div className="flex gap-3 mb-4">
-          <button onClick={() => {
-            if (listening) stopRecording();
-            else { setMode("voice"); void startRecording(); }
-          }}
-            disabled={recording.status === "requesting" || recording.status === "processing"}
-            className="flex-1 py-4 rounded-xl border-2 flex flex-col items-center gap-1 transition-all active:scale-95"
-            style={{
-              borderColor: mode === "voice" ? "var(--green)" : "var(--border)",
-              background: mode === "voice" ? "var(--success-bg)" : "var(--card)"
-            }}>
-            <Mic size={28} color={mode === "voice" ? "var(--green)" : "var(--text-muted)"} />
-            <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>{t("rep.step1.voice")}</span>
-          </button>
-          <button disabled={recording.busy} onClick={() => setMode(mode === "text" ? "none" : "text")}
-            className="flex-1 py-4 rounded-xl border-2 flex flex-col items-center gap-1 transition-all active:scale-95"
-            style={{
-              borderColor: mode === "text" ? "var(--navy)" : "var(--border)",
-              background: mode === "text" ? "#EFF6FF" : "var(--card)"
-            }}>
-            <Keyboard size={28} color={mode === "text" ? "var(--navy)" : "var(--text-muted)"} />
-            <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>{t("rep.step1.type")}</span>
-          </button>
-        </div>
-
-        {mode === "voice" && (
-          <div className="p-5 rounded-xl border-2 mb-4 text-center"
-            style={{ borderColor: "var(--green)", background: "var(--success-bg)" }}>
-            {recording.status === "requesting" || recording.status === "processing" ? (
-              <p role="status" className="flex items-center justify-center gap-2 text-sm" style={{ color: "var(--text)" }}>
-                <Loader className="animate-spin" size={20} />
-                {recording.status === "requesting" ? "Waiting for microphone permission…" : "Preparing recording for playback…"}
-              </p>
-            ) : !listening ? (
-              <>
-                <button onClick={() => void startRecording()}
-                  aria-label={recordedAudio ? "Record again" : "Start recording"}
-                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 transition-all active:scale-95"
-                  style={{ background: "var(--green)" }}>
-                  <Mic size={30} color="white" />
-                </button>
-                <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>{recordedAudio ? "Record again" : t("rep.step1.tap_to_speak")}</p>
-                {recordedAudio && (
-                  <>
-                    <RecordedAudioPlayer file={recordedAudio} />
-                    <button
-                      onClick={async () => {
-                        setIsTranscribing(true);
-                        try {
-                          const { transcribeAudio } = await import("./api");
-                          const data = await transcribeAudio(recordedAudio);
-                          if (data.error) { alert(data.error); } else {
-                            setDesc(data.transcription || data.text || "");
-                            setMode("text");
-                          }
-                        } catch (e: any) {
-                          alert(e.message || "Failed to transcribe");
-                        } finally {
-                          setIsTranscribing(false);
-                        }
-                      }}
-                      disabled={isTranscribing}
-                      className="mt-4 px-4 py-2 rounded-xl text-white font-bold flex items-center justify-center gap-2 mx-auto"
-                      style={{ background: "var(--navy)" }}
-                    >
-                      {isTranscribing && <Loader className="animate-spin" size={16} />}
-                      {isTranscribing ? "Transcribing..." : "Convert to Text"}
-                    </button>
-                  </>
-                )}
-                {!recordedAudio && report.files.length >= 10 && <p className="text-xs mt-2">A report can contain up to 10 attachments.</p>}
-                {recordingError && <p className="text-xs mt-3" style={{ color: "var(--error)" }}>{recordingError}</p>}
-              </>
-            ) : (
-              <>
-                <div className="relative inline-flex mb-3">
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center"
-                    style={{ background: "var(--green)" }}>
-                    <MicOff size={28} color="white" />
-                  </div>
-                  <div className="absolute inset-0 rounded-full pulse-ring border-2"
-                    style={{ borderColor: "var(--green)" }} />
-                </div>
-                <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>{t("rep.step1.listening_text")}</p>
-                <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
-                  {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")} • Your voice is being recorded
-                </p>
-                <button onClick={stopRecording}
-                  className="mt-3 px-5 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: "var(--error)" }}>
-                  Stop & Save Recording
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {mode === "text" && (
-          <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={4}
-            placeholder="Apni samasya yahan likhein… / Type your problem here…"
-            className="w-full px-4 py-3 rounded-xl border-2 text-sm outline-none resize-none mb-4"
-            style={{
-              borderColor: desc ? "var(--navy)" : "var(--border)",
-              background: "var(--input-bg)", color: "var(--text)"
-            }} />
-        )}
-
-        <h2 className="font-semibold text-sm mb-3" style={{ color: "var(--text)" }}>{t("rep.step1.photo")}</h2>
-        <div className="grid grid-cols-3 gap-2 mb-5">
-          <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => addMedia(e.target.files, "Photo upload")} />
-          <input ref={imageInput} type="file" accept="image/*" multiple className="hidden" onChange={e => addMedia(e.target.files, "Photo upload")} />
-          <input ref={videoInput} type="file" accept="video/*" multiple className="hidden" onChange={e => addMedia(e.target.files, "Video upload")} />
-          
-          <button
-            type="button"
-            onClick={handleTakePhotoClick}
-            className="py-3.5 px-2 rounded-xl border-2 flex flex-col items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm hover:border-amber-500"
-            style={{
-              borderColor: report.evidence === "Take Photo" || report.evidence === "Photo upload" ? "var(--green)" : "var(--border)",
-              background: "var(--card)",
-            }}
-          >
-            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "color-mix(in srgb, var(--amber) 18%, transparent)", color: "var(--amber)" }}>
-              <Camera size={20} />
-            </div>
-            <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>Take Photo</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => imageInput.current?.click()}
-            className="py-3.5 px-2 rounded-xl border-2 flex flex-col items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm hover:border-navy"
-            style={{ borderColor: "var(--border)", background: "var(--card)" }}
-          >
-            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "color-mix(in srgb, var(--navy) 14%, transparent)", color: "var(--navy)" }}>
-              <Upload size={20} />
-            </div>
-            <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>Upload Photo</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => videoInput.current?.click()}
-            className="py-3.5 px-2 rounded-xl border-2 flex flex-col items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm hover:border-purple-500"
-            style={{ borderColor: "var(--border)", background: "var(--card)" }}
-          >
-            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "color-mix(in srgb, #9333EA 14%, transparent)", color: "#9333EA" }}>
-              <Video size={20} />
-            </div>
-            <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>Upload Video</span>
-          </button>
-        </div>
-
-        {/* Attachments Section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-sm flex items-center gap-2" style={{ color: "var(--text)" }}>
-              <Paperclip size={16} color="var(--green)" />
-              <span>Attachments</span>
-              {report.files.length > 0 && (
-                <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: "var(--success-bg)", color: "var(--green)" }}>
-                  {report.files.length}
-                </span>
-              )}
-            </h3>
-            {report.files.length > 0 && (
-              <span className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
-                {report.files.length} / 10 attached
-              </span>
-            )}
-          </div>
-
-          {report.files.length === 0 ? (
-            <div
-              className="p-6 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center"
-              style={{ borderColor: "var(--border)", background: "var(--card)" }}
-            >
-              <div className="w-11 h-11 rounded-full flex items-center justify-center mb-2" style={{ background: "var(--bg)" }}>
-                <Paperclip size={20} style={{ color: "var(--text-muted)" }} />
-              </div>
-              <p className="text-xs font-semibold mb-0.5" style={{ color: "var(--text)" }}>No attachments added yet</p>
-              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                Voice recordings, photos or videos will appear here
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {report.files.map((file, index) => {
-                const isImage = file.type.startsWith("image/");
-                const isAudio = file.type.startsWith("audio/");
-                const isVideo = file.type.startsWith("video/");
-
-                return (
-                  <div
-                    key={`${file.name}-${index}`}
-                    className="relative aspect-square rounded-2xl border overflow-hidden flex flex-col justify-between group shadow-sm transition-all hover:shadow-md"
-                    style={{ borderColor: "var(--border)", background: "var(--card)" }}
-                  >
-                    {/* Delete button */}
-                    <button
-                      type="button"
-                      onClick={() => removeAttachment(index)}
-                      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/65 hover:bg-red-600 text-white flex items-center justify-center transition-colors cursor-pointer shadow-md"
-                      title="Remove attachment"
-                    >
-                      <X size={14} />
-                    </button>
-
-                    {isImage && (
-                      <>
-                        <img
-                          src={report.previews[index]}
-                          alt={file.name}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                        />
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-2 text-white flex items-center gap-1.5">
-                          <Camera size={12} className="text-amber-400 shrink-0" />
-                          <span className="text-[10px] font-medium truncate">{file.name}</span>
-                        </div>
-                      </>
-                    )}
-
-                    {isVideo && (
-                      <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center p-3 text-white">
-                        <div className="w-12 h-12 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center mb-1">
-                          <Video size={24} />
-                        </div>
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2 text-white flex items-center gap-1.5">
-                          <Video size={12} className="text-purple-400 shrink-0" />
-                          <span className="text-[10px] font-medium truncate">{file.name}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {isAudio && (
-                      <div className="w-full h-full p-3 flex flex-col justify-between" style={{ background: "var(--success-bg)" }}>
-                        <div className="flex items-center gap-1.5" style={{ color: "var(--green)" }}>
-                          <Mic size={16} />
-                          <span className="text-xs font-bold">Voice Note</span>
-                        </div>
-                        <div className="my-auto py-1 w-full">
-                          <RecordedAudioPlayer file={file} compact />
-                        </div>
-                        <div className="text-[10px] font-medium truncate" style={{ color: "var(--text-muted)" }}>
-                          {file.name}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Live Camera Viewfinder Modal */}
-        <CameraCaptureModal
-          isOpen={isCameraOpen}
-          onClose={() => setIsCameraOpen(false)}
-          onCapture={handleCapturePhoto}
-          onFallbackFileInput={() => cameraInput.current?.click()}
-        />
-
-        <Btn onClick={() => onNav("report-step2")} disabled={(!desc.trim() && !recordedAudio) || !selCat || recording.busy} className="w-full py-4 text-base"
-          icon={<ArrowRight size={18} />}>
-          {t("rep.step1.next")}
-        </Btn>
-      </div>
-    </div>
-  );
-}
-
-// ─── REPORT STEP 2 ────────────────────────────────────────────────────────────
-function ReportStep2Screen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, role } = useApp();
-  const { report, setReport } = useApp();
-  const [method, setMethod] = useState<"none" | "gps" | "map" | "address" | "profile">("none");
-  const [addressInput, setAddressInput] = useState("");
-  const [isLocating, setIsLocating] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
-  const locationWatchRef = useRef<number | null>(null);
-  const locationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const stopLocationWatch = () => {
-    if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current);
-    if (locationTimerRef.current !== null) clearTimeout(locationTimerRef.current);
-    locationWatchRef.current = null;
-    locationTimerRef.current = null;
-  };
-  useEffect(() => () => stopLocationWatch(), []);
-
-  const saveCoordinates = (latitude: number, longitude: number, locationMethod: string, addressDetails?: any) => {
-    setLocationError(null);
-    setReport(current => ({ 
-      ...current, 
-      latitude: latitude.toFixed(6), 
-      longitude: longitude.toFixed(6), 
-      locationMethod,
-      ...(addressDetails || {})
-    }));
-  };
-
-  const geocodeAddress = async (query: string, methodLabel: string) => {
-    const cleanedQuery = query.trim();
-    if (!cleanedQuery) {
-      setLocationError("Please enter an address to search.");
-      return false;
-    }
-
-    setIsLocating(true);
-    setLocationError(null);
-    setReport(current => ({ ...current, latitude: "", longitude: "" }));
-    try {
-      const location = await geocodeProblemAddress(cleanedQuery);
-      saveCoordinates(location.latitude, location.longitude, methodLabel, {
-        district: location.address.district || "",
-        block: location.address.block || "",
-        village: location.address.village || location.displayName || cleanedQuery,
-      });
-      return true;
-    } catch (error) {
-      setLocationError(error instanceof Error ? error.message : "Failed to fetch location. Please try again.");
-      return false;
-    } finally {
-      setIsLocating(false);
-    }
-  };
-
-  const useProfileLocation = async () => {
-    setMethod("profile");
-    setIsLocating(true);
-    setLocationError(null);
-    try {
-      const res = await getProfileMe();
-      if (res?.profile) {
-        const p = res.profile;
-        const queryParts = [
-          p.house_number, p.landmark, p.city_village, p.district, p.pincode,
-          p.office_address, p.villages_covered, p.block, p.panchayat_area,
-          p.institutional_address, p.company_address, p.registered_address
-        ].filter(Boolean);
-        
-        if (queryParts.length > 0) {
-          const query = queryParts.slice(0, 4).join(", ");
-          const found = await geocodeAddress(query, "Profile");
-          if (found) {
-            setReport(current => ({ ...current, district: p.district || current.district, block: p.block || current.block, village: current.village || query }));
-          }
-        } else {
-          setLocationError("No saved address found in your profile.");
-          setIsLocating(false);
-        }
-      } else {
-        setLocationError("Could not retrieve profile.");
-        setIsLocating(false);
-      }
-    } catch (e) {
-      setLocationError("Failed to access saved address.");
-      setIsLocating(false);
-    }
-  };
-
-  const useCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationError("Location is not supported by this browser. Please select the point on the map.");
-      return;
-    }
-    if (!window.isSecureContext) {
-      setLocationError("Current location requires a secure (HTTPS) connection. Open the app through its HTTPS preview link.");
-      return;
-    }
-    setMethod("gps");
-    stopLocationWatch();
-    setLocationError(null);
-    setIsLocating(true);
-    setLocationAccuracy(null);
-
-    let bestAccuracy = Number.POSITIVE_INFINITY;
-    locationWatchRef.current = navigator.geolocation.watchPosition(
-      ({ coords }) => {
-        if (coords.accuracy < bestAccuracy) {
-          bestAccuracy = coords.accuracy;
-          saveCoordinates(coords.latitude, coords.longitude, "GPS");
-          setLocationAccuracy(coords.accuracy);
-        }
-        // A reading within 30 metres is sufficiently precise for a problem report.
-        if (coords.accuracy <= 30) {
-          stopLocationWatch();
-          setIsLocating(false);
-        }
-      },
-      (error) => {
-        if (error.code === 1) {
-          stopLocationWatch();
-          setLocationError("Location permission was blocked. Allow precise location for this site, then try again.");
-          setIsLocating(false);
-        } else if (bestAccuracy === Number.POSITIVE_INFINITY) {
-          setLocationError("Searching for a precise GPS signal… Move near a window, or select the point on the map.");
-        }
-      },
-      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
-    );
-
-    locationTimerRef.current = setTimeout(() => {
-      stopLocationWatch();
-      setIsLocating(false);
-      if (bestAccuracy === Number.POSITIVE_INFINITY) {
-        setLocationError("A precise location could not be detected. Check device location settings or place the pin on the map.");
-      } else if (bestAccuracy > 100) {
-        setLocationError(`Location is approximate (±${Math.round(bestAccuracy)} m). Drag the pin to the exact place.`);
-      }
-    }, 35000);
-  };
-
-
-  const StepDots = () => (
-    <div className="flex items-center gap-1">
-      {[1, 2, 3].map(s => (
-        <div key={s} className="flex items-center gap-1">
-          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-            style={{
-              background: s <= 2 ? "var(--amber)" : "rgba(255,255,255,0.2)",
-              color: s <= 2 ? "var(--navy)" : "rgba(255,255,255,0.5)"
-            }}>{s === 1 ? <CheckCircle size={12} /> : s}</div>
-          {s < 3 && <div className="w-5 h-0.5" style={{ background: s < 2 ? "var(--amber)" : "rgba(255,255,255,0.2)" }} />}
-        </div>
-      ))}
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
-      <div className="sticky top-0 z-10 px-4 py-4" style={{ background: "var(--nav-bg)" }}>
-        <div className="flex items-center justify-between mb-3">
-          <button onClick={() => onNav("report-step1")} className="flex items-center gap-1 text-sm"
-            style={{ color: "rgba(255,255,255,0.7)" }}>
-            <ArrowLeft size={15} /> {t("btn.back")}
-          </button>
-          <StepDots />
-          <div className="w-14" />
-        </div>
-        <h1 className="text-xl font-black text-white">{t("rep.step2.title")}</h1>
-      </div>
-
-      <div className="px-4 py-5">
-        {role === "citizen" && (
-          <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
-            <MitraAssistant
-              size="compact"
-              variant="compact"
-              message={t("mitra.rep.step2")}
-              subMessage={method === "gps" ? t("loc.confirmed") : undefined}
-            />
-          </div>
-        )}
-
-        <div className="space-y-3 mb-5">
-          {[
-            { method: "gps" as const, icon: <Navigation size={24} />, label: "Current Location", color: "var(--green)" },
-            { method: "address" as const, icon: <Building2 size={24} />, label: "Enter Problem Address", color: "#7C3AED" },
-            { method: "profile" as const, icon: <UserCheck size={24} />, label: "Use Saved Address", color: "#F59E0B" },
-            { method: "map" as const, icon: <Map size={24} />, label: "Choose on Map", color: "var(--navy)" },
-          ].map(opt => (
-            <button key={opt.method} onClick={() => {
-              setMethod(opt.method);
-              if (opt.method === "gps") useCurrentLocation();
-              else if (opt.method === "profile") useProfileLocation();
-              else {
-                setLocationError(null);
-                setReport(current => ({
-                  ...current,
-                  latitude: opt.method === "address" ? "" : current.latitude,
-                  longitude: opt.method === "address" ? "" : current.longitude,
-                  locationMethod: opt.method === "map" ? "Map" : "Address",
-                }));
-              }
-            }}
-              className="w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all active:scale-95"
-              style={{
-                borderColor: method === opt.method ? opt.color : "var(--border)",
-                background: method === opt.method ? `color-mix(in srgb, ${opt.color} 8%, var(--card))` : "var(--card)"
-              }}>
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ background: `color-mix(in srgb, ${opt.color} 12%, transparent)`, color: opt.color }}>
-                {opt.icon}
-              </div>
-              <div className="flex-1 text-left">
-                <div className="font-bold text-sm" style={{ color: "var(--text)" }}>{opt.label}</div>
-              </div>
-              {method === opt.method && <CheckCircle size={20} color={opt.color} />}
-            </button>
-          ))}
-        </div>
-
-        {method === "gps" && (
-          <Card className="p-4 mb-5">
-            <div className="flex items-center gap-2 mb-3">
-              {report.latitude && report.longitude ? <CheckCircle size={18} color="var(--success)" /> : <Navigation size={18} color="var(--amber)" />}
-              <div>
-                <div className="text-sm font-semibold" style={{ color: report.latitude && report.longitude ? "var(--success)" : "var(--text)" }}>{report.latitude && report.longitude ? t("loc.detected") : "Detecting your location…"}</div>
-                <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Your browser location is used only for this report.</div>
-              </div>
-            </div>
-            <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => { stopLocationWatch(); setIsLocating(false); setLocationAccuracy(null); saveCoordinates(lat, lng, "Map"); }} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} accuracy={locationAccuracy} className="w-full max-w-2xl aspect-square mx-auto" />
-          </Card>
-        )}
-
-        {method === "address" && (
-          <Card className="p-4 mb-5">
-            <div className="mb-3">
-               <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Problem Address</label>
                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="e.g. MG Road, Ranchi"
-                    value={addressInput}
-                    onChange={e => {
-                      setAddressInput(e.target.value);
-                      setLocationError(null);
-                      if (report.locationMethod === "Address" && report.latitude) {
-                        setReport(current => ({ ...current, latitude: "", longitude: "" }));
-                      }
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === "Enter" && addressInput.trim() && !isLocating) {
-                        e.preventDefault();
-                        void geocodeAddress(addressInput, "Address");
-                      }
-                    }}
-                    className="flex-1 px-3 py-2.5 rounded-xl border text-sm outline-none"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                  <Btn 
-                    onClick={() => void geocodeAddress(addressInput, "Address")}
-                    disabled={!addressInput.trim() || isLocating}
-                    className="px-4"
-                  >
-                    {isLocating ? <RefreshCw size={16} className="animate-spin" /> : "Search"}
-                  </Btn>
+                 <Btn onClick={(e) => { e.stopPropagation(); setSelectedTrackingId(c.problem_code); onNav("uni-challenge-detail"); }} variant="ghost" className="flex-1 text-xs">View Details</Btn>
                </div>
-            </div>
-            {report.latitude && report.longitude && (
-              <div className="mt-3">
-                <p className="text-xs font-semibold mb-2" style={{ color: "var(--text)" }}>
-                  <Map size={14} className="inline mr-1" /> {t("rep.step2.map_hint")}
-                </p>
-                <LocationPickerMap
-                  latitude={report.latitude}
-                  longitude={report.longitude}
-                  onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Address")}
-                  onUseCurrentLocation={useCurrentLocation}
-                  isLocating={isLocating}
-                  locationError={locationError}
-                  accuracy={locationAccuracy}
-                  className="w-full max-w-2xl aspect-square mx-auto"
-                />
-              </div>
-            )}
-            {locationError && !report.latitude && (
-              <div className="text-red-500 text-xs mt-2">{locationError}</div>
-            )}
-          </Card>
-        )}
-
-        {method === "profile" && (
-          <Card className="p-4 mb-5">
-            <div className="mb-3 text-sm font-medium" style={{ color: "var(--text)" }}>
-              {isLocating ? "Fetching and geocoding your saved profile address..." : (report.latitude && report.longitude ? "Profile address geocoded successfully. You can adjust the pin." : "")}
-            </div>
-            {report.latitude && report.longitude && (
-              <div className="mt-3">
-                <p className="text-xs font-semibold mb-2" style={{ color: "var(--text)" }}>
-                  <Map size={14} className="inline mr-1" /> {t("rep.step2.map_hint")}
-                </p>
-                <LocationPickerMap
-                  latitude={report.latitude}
-                  longitude={report.longitude}
-                  onLocationChange={(lat, lng) => saveCoordinates(lat, lng, "Profile")}
-                  onUseCurrentLocation={useCurrentLocation}
-                  isLocating={isLocating}
-                  locationError={locationError}
-                  accuracy={locationAccuracy}
-                  className="w-full max-w-2xl aspect-square mx-auto"
-                />
-              </div>
-            )}
-            {locationError && !report.latitude && (
-              <div className="text-red-500 text-xs mt-2">{locationError}</div>
-            )}
-          </Card>
-        )}
-
-        {method === "map" && (
-          <Card className="p-4 mb-5">
-            <p className="text-sm font-semibold mb-2" style={{ color: "var(--text)" }}>
-              <Map size={14} className="inline mr-1" /> {t("rep.step2.map_hint")}
-            </p>
-            <LocationPickerMap latitude={report.latitude} longitude={report.longitude} onLocationChange={(lat, lng) => { stopLocationWatch(); setIsLocating(false); setLocationAccuracy(null); saveCoordinates(lat, lng, "Map"); }} onUseCurrentLocation={useCurrentLocation} isLocating={isLocating} locationError={locationError} accuracy={locationAccuracy} className="w-full max-w-2xl aspect-square mx-auto" />
-          </Card>
-        )}
-
-        {method !== "none" && (
-          <Btn onClick={() => onNav("report-step3")} disabled={!report.latitude || !report.longitude} className="w-full py-4 text-base"
-            icon={<ArrowRight size={18} />}>
-            {t("rep.step2.confirm")}
-          </Btn>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── REPORT STEP 3 ────────────────────────────────────────────────────────────
-function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, role } = useApp();
-  const { report } = useApp();
-  const recordedAudio = report.files.find(file => file.type.startsWith("audio/"));
-  const StepDots = () => (
-    <div className="flex items-center gap-1">
-      {[1, 2, 3].map(s => (
-        <div key={s} className="flex items-center gap-1">
-          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-            style={{ background: "var(--amber)", color: "var(--navy)" }}>
-            {s < 3 ? <CheckCircle size={12} /> : "3"}
-          </div>
-          {s < 3 && <div className="w-5 h-0.5" style={{ background: "var(--amber)" }} />}
-        </div>
-      ))}
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
-      <div className="sticky top-0 z-10 px-4 py-4" style={{ background: "var(--nav-bg)" }}>
-        <div className="flex items-center justify-between mb-3">
-          <button onClick={() => onNav("report-step2")} className="flex items-center gap-1 text-sm"
-            style={{ color: "rgba(255,255,255,0.7)" }}>
-            <ArrowLeft size={15} /> {t("btn.back")}
-          </button>
-          <StepDots />
-          <div className="w-14" />
-        </div>
-        <h1 className="text-xl font-black text-white">{t("rep.step3.title")}</h1>
-      </div>
-
-      <div className="px-4 py-5">
-        {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
-        {role === "citizen" && (
-          <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
-            <MitraAssistant
-              size="compact"
-              variant="compact"
-              message={t("mitra.rep.step3")}
-              subMessage="कृपया अपनी समस्या का विवरण जांचें और जमा करें"
-            />
-          </div>
-        )}
-
-        <Card className="p-4 mb-4">
-          <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: "var(--text)" }}>
-            <ClipboardList size={16} /> {t("rep.step3.summary")}
-          </h3>
-          <div className="space-y-3">
-            <div className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
-              <p className="text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                <MessageSquare size={11} /> {t("rep.step3.desc_label")}
-              </p>
-              {report.description.trim() && (
-                <p className="text-sm" style={{ color: "var(--text)" }}>{report.description}</p>
-              )}
-              {recordedAudio && (
-                <div className="mt-3 p-3 sm:p-4 rounded-xl border" style={{ background: "var(--success-bg)", borderColor: "var(--border)" }}>
-                  <div className="flex items-center gap-2" style={{ color: "var(--green)" }}>
-                    <Mic size={18} />
-                    <span className="text-sm font-semibold">{t("rep.step1.voice")}</span>
-                    {report.audioDurationSeconds > 0 && (
-                      <span className="ml-auto text-xs font-mono tabular-nums">
-                        {Math.floor(report.audioDurationSeconds / 60)}:{String(report.audioDurationSeconds % 60).padStart(2, "0")}
-                      </span>
-                    )}
-                  </div>
-                  <RecordedAudioPlayer file={recordedAudio} />
-                </div>
-              )}
-            </div>
-            <div className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
-              <p className="text-xs font-medium mb-1 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                <MapPin size={11} /> {t("rep.step3.loc_label")}
-              </p>
-              <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                {[report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Map location selected"}
-              </p>
-              {report.latitude && report.longitude && (
-                <p className="text-xs font-mono mt-1" style={{ color: "var(--text-muted)" }}>
-                  {Number(report.latitude).toFixed(4)}, {Number(report.longitude).toFixed(4)}
-                </p>
-              )}
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--success-bg)" }}>
-                <Droplets size={16} color="var(--green)" className="mx-auto mb-1" />
-                <p className="text-xs font-bold" style={{ color: "var(--green)" }}>{report.category}</p>
-              </div>
-              <div className="flex-1 p-3 rounded-xl text-center" style={{ background: "var(--warning-bg)" }}>
-                {recordedAudio && report.files.length === 1
-                  ? <Mic size={16} color="var(--warning)" className="mx-auto mb-1" />
-                  : <Camera size={16} color="var(--warning)" className="mx-auto mb-1" />}
-                <p className="text-xs font-bold" style={{ color: "var(--warning)" }}>{report.evidence || "No evidence added"}</p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <div className="p-4 rounded-xl border mb-5" style={{ background: "#EFF6FF", borderColor: "#BFDBFE" }}>
-          <p className="text-xs font-semibold mb-2 flex items-center gap-1" style={{ color: "#1D4ED8" }}>
-            <Activity size={13} /> {t("rep.step3.ai_handle")}
-          </p>
-          {["Categorize and prioritize your problem", "Detect similar reports nearby", "Match with the best university", "Generate a unique Challenge ID"].map(item => (
-            <p key={item} className="text-xs flex items-center gap-1.5 mb-1" style={{ color: "#1E40AF" }}>
-              <CheckCircle size={11} /> {item}
-            </p>
+             </Card>
           ))}
-        </div>
-
-        <Btn onClick={() => onNav("ai-processing")} className="w-full py-4 text-base mb-3"
-          icon={<SendHorizontal size={18} />}>
-          {t("rep.submit")}
-        </Btn>
-        <Btn variant="ghost" onClick={() => onNav("report-step1")} className="w-full"
-          icon={<ArrowLeft size={16} />}>
-          {t("rep.edit")}
-        </Btn>
-      </div>
-    </div>
-  );
-}
-
-// ─── AI PROCESSING ────────────────────────────────────────────────────────────
-function AIProcessingScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, report, setReport } = useApp();
-  const [step, setStep] = useState(0);
-  const [error, setError] = useState("");
-  const steps = [
-    t("ai.processing"),
-    "Checking for similar reports…",
-    "Detecting category and priority…",
-    "Preparing your challenge…",
-  ];
-
-  useEffect(() => {
-    let cancelled = false;
-    // Animate steps while waiting for API
-    const timer = setInterval(() => {
-      setStep(s => Math.min(s + 1, steps.length - 2)); // stop at second-to-last
-    }, 1200);
-
-    // Call real AI analysis
-    analyzeProblemAI({
-      text: report.description || report.category || "Problem report",
-      latitude: report.latitude,
-      longitude: report.longitude,
-    })
-      .then((aiData: any) => {
-        if (cancelled) return;
-        clearInterval(timer);
-        setStep(steps.length - 1);
-        // Store AI result in report state
-        setReport(prev => ({ ...prev, aiAnalysis: aiData }));
-        setTimeout(() => { if (!cancelled) onNav("ai-result"); }, 600);
-      })
-      .catch((err: any) => {
-        if (cancelled) return;
-        clearInterval(timer);
-        console.error("AI analysis failed:", err);
-        setError(err.message || "AI analysis failed. You can still submit your report.");
-        setStep(steps.length - 1);
-        // Navigate anyway after a delay so user isn't stuck
-        setTimeout(() => { if (!cancelled) onNav("ai-result"); }, 2000);
-      });
-
-    return () => { cancelled = true; clearInterval(timer); };
-  }, []);
-
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: "var(--navy-dark)" }}>
-      <div className="text-center">
-        <div className="relative inline-flex mb-8">
-          <div className="w-24 h-24 rounded-full flex items-center justify-center p-3 animate-spin [animation-duration:2.5s]"
-            style={{ background: "rgba(242,184,75,0.12)", border: "2px solid var(--amber)" }}>
-            <NavJharLogo variant="icon" className="w-14 h-14" />
-          </div>
-          <div className="absolute inset-0 rounded-full pulse-ring"
-            style={{ border: "2px solid var(--amber)", opacity: 0.4 }} />
-        </div>
-        <h1 className="text-2xl font-black text-white mb-2">{t("ai.processing")}</h1>
-        <p className="text-sm mb-8" style={{ color: "rgba(255,255,255,0.5)" }}>AI is understanding your problem</p>
-        {error && <p className="text-sm mb-4 px-4 py-2 rounded-lg" style={{ background: "rgba(239,68,68,0.2)", color: "#FCA5A5" }}>{error}</p>}
-        <div className="w-full max-w-xs">
-          {steps.map((s, i) => (
-            <div key={i} className="flex items-center gap-3 py-2">
-              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0"
-                style={{
-                  background: i < step ? "var(--green)" : i === step ? "var(--amber)" : "rgba(255,255,255,0.1)",
-                }}>
-                {i < step ? <CheckCircle size={14} color="white" /> : i === step ? <Loader size={14} color="var(--navy)" /> : <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>○</span>}
-              </div>
-              <span className="text-sm text-left"
-                style={{ color: i <= step ? "white" : "rgba(255,255,255,0.3)" }}>{s}</span>
-            </div>
-          ))}
+          {recommended.length === 0 && <div className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>No recommendations available. Please edit your Profile Description.</div>}
         </div>
       </div>
     </div>
   );
 }
 
-// ─── AI RESULT ────────────────────────────────────────────────────────────────
-function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
+function TeamFormationScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
-  const { report, setReport } = useApp();
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
-  const submitReport = async () => {
-    setSubmitting(true); setSubmitError("");
-    try {
-      const data = new FormData();
-      data.append("categoryId", report.categoryId);
-      data.append("categoryName", report.category);
-      const submittedDescription = report.description.trim() || "Problem details are attached as a voice recording.";
-      data.append("title", report.description.trim().slice(0, 100) || "Voice-recorded problem report");
-      data.append("description", submittedDescription);
-      data.append("district", report.district || "Ranchi");
-      data.append("block", report.block || "Kanke");
-      data.append("panchayatWard", report.panchayat);
-      data.append("landmark", report.village);
-      data.append("siteAddress", [report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Map-selected location");
-      if (report.latitude && report.longitude) {
-        data.append("latitude", report.latitude);
-        data.append("longitude", report.longitude);
-      }
-      report.files.forEach(file => data.append("media", file));
-      if (report.audioDurationSeconds) data.append("voiceDurationSeconds", String(report.audioDurationSeconds));
-      const result = await submitProblem(data);
-      setReport(current => ({ ...current, problemCode: result.problem.problem_code }));
-      onNav("submit-success");
-    } catch (err: any) { setSubmitError(err.message || "Could not submit the report. Please try again."); }
-    finally { setSubmitting(false); }
-  };
-  return (
-    <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
-      <div className="px-4 py-5" style={{ background: "var(--nav-bg)" }}>
-        <button onClick={() => onNav("report-step3")} className="flex items-center gap-1 text-xs mb-2"
-          style={{ color: "rgba(255,255,255,0.6)" }}>
-          <ArrowLeft size={13} /> {t("btn.back")}
-        </button>
-        <h1 className="text-xl font-black text-white flex items-center gap-2">
-          <Activity size={20} color="var(--amber)" /> AI Analysis Complete
-        </h1>
-      </div>
-      <div className="px-4 py-5 space-y-4">
-        {report.files.some(f => f.type.startsWith("audio/")) && report.description && (
-          <Card className="p-4" style={{ background: "var(--card)", borderColor: "var(--navy)" }}>
-            <h3 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ color: "var(--navy)" }}>
-              <Mic size={16} /> Voice Transcription
-            </h3>
-            <p className="text-sm italic" style={{ color: "var(--text)" }}>
-              "{report.description}"
-            </p>
-          </Card>
-        )}
-        <Card className="p-4">
-          <h3 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "var(--text)" }}>
-            <CheckCircle size={16} color="var(--success)" /> AI Detection Results
-          </h3>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { icon: <Layers size={18} color="var(--navy)" />, label: t("ai.category"), val: report.aiAnalysis?.category || report.category || "Other", conf: report.aiAnalysis?.confidence ? `${report.aiAnalysis.confidence}% conf` : "Manual" },
-              { icon: <AlertTriangle size={18} color="var(--error)" />, label: t("ai.priority"), val: report.aiAnalysis?.priorityScore ? `${report.aiAnalysis.priorityScore}/100` : "TBD", conf: "Priority Score" },
-              { icon: <RefreshCw size={18} color="var(--warning)" />, label: t("ai.duplicate"), val: report.aiAnalysis?.isDuplicate ? "Potential Match" : "Unique", conf: report.aiAnalysis?.duplicateOfId ? `ID: ${report.aiAnalysis.duplicateOfId}` : "" },
-            ].map(r => (
-              <div key={r.label} className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
-                <div className="mb-1">{r.icon}</div>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{r.label}</p>
-                <p className="font-bold text-sm" style={{ color: "var(--text)" }}>{r.val}</p>
-                {r.conf && <p className="text-xs" style={{ color: "var(--green)" }}>{r.conf}</p>}
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: "var(--text)" }}>
-            <Layers size={16} color="var(--navy)" /> {t("ai.dna")}
-          </h3>
-          <div className="space-y-2">
-            {[
-              ["Domain", report.aiAnalysis?.category || report.category || "Other"],
-              ["Severity", report.aiAnalysis?.severity || "Pending Assessment"],
-              ["Required Skills", Array.isArray(report.aiAnalysis?.requiredSkills) ? report.aiAnalysis.requiredSkills.join(", ") : (report.aiAnalysis?.requiredSkills || "TBD")],
-              ["Expected Impact", report.aiAnalysis?.expectedImpact || "TBD"],
-              ["Location", [report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Unknown"],
-            ].map(([k, v]) => (
-              <div key={k} className="flex gap-2 text-sm">
-                <span className="w-32 flex-shrink-0" style={{ color: "var(--text-muted)" }}>{k}</span>
-                <span className="font-medium" style={{ color: "var(--text)" }}>{v}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {report.aiAnalysis && !report.aiAnalysis.error && (
-          <Card className="p-4 mb-5">
-            <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: "var(--navy)" }}>
-              <Activity size={16} /> AI Analysis Summary
-            </h3>
-            <p className="text-sm leading-relaxed" style={{ color: "var(--text)" }}>
-              {report.aiAnalysis.expectedImpact || "AI analysis completed. Category and priority have been assigned based on the problem description."}
-            </p>
-            {report.aiAnalysis.originalText && (
-              <div className="mt-3 p-3 rounded-lg" style={{ background: "var(--bg)" }}>
-                <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>Original Problem Text:</p>
-                <p className="text-sm italic" style={{ color: "var(--text)" }}>"{report.aiAnalysis.originalText}"</p>
-              </div>
-            )}
-          </Card>
-        )}
-
-        {report.aiAnalysis?.isDuplicate && (
-          <div className="p-4 rounded-xl border" style={{ background: "var(--warning-bg)", borderColor: "var(--warning)" }}>
-            <p className="text-sm font-semibold mb-1 flex items-center gap-2" style={{ color: "var(--warning)" }}>
-              <AlertTriangle size={15} /> Similar Report Found Nearby
-            </p>
-            <p className="text-xs" style={{ color: "var(--text)" }}>
-              This may describe the same problem (ID: {report.aiAnalysis.duplicateOfId}) and will be grouped by the government validator.
-            </p>
-          </div>
-        )}
-
-        <div className="flex gap-3">
-          <Btn onClick={submitReport} disabled={submitting} className="flex-1 py-4 text-base"
-            icon={submitting ? <Loader size={18} className="animate-spin" /> : <CheckCircle size={18} />}>
-            {submitting ? "Submitting..." : t("rep.confirm")}
-          </Btn>
-          <Btn variant="ghost" onClick={() => onNav("report-step1")} className="px-4"
-            icon={<ArrowLeft size={16} />}>
-            {t("rep.edit")}
-          </Btn>
-        </div>
-        {submitError && <p className="text-xs font-semibold" style={{ color: "var(--error)" }}>{submitError}</p>}
-      </div>
-    </div>
-  );
-}
-
-// ─── SUBMIT SUCCESS ────────────────────────────────────────────────────────────
-function SubmitSuccessScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, role } = useApp();
-  const { report } = useApp();
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 text-center"
-      style={{ background: "var(--bg)" }}>
-      {/* Mitra Compact Banner (Image 2 style) - ONLY for Individual Citizen */}
-      {role === "citizen" ? (
-        <div className="mb-6 w-full max-w-md p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
-          <MitraAssistant
-            size="compact"
-            variant="compact"
-            message={t("mitra.rep.success")}
-            subMessage={t("success.title")}
-          />
-        </div>
-      ) : (
-        <div className="text-center mb-6">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3"
-            style={{ background: "var(--success-bg)" }}>
-            <CheckCircle size={32} color="var(--green)" />
-          </div>
-          <h2 className="text-xl font-bold" style={{ color: "var(--text)" }}>{t("success.title")}</h2>
-        </div>
-      )}
-      <Card className="p-5 mb-6 w-full max-w-xs">
-        <p className="text-xs font-medium mb-2 flex items-center justify-center gap-1"
-          style={{ color: "var(--text-muted)" }}>
-          <ClipboardList size={12} /> Challenge ID
-        </p>
-        <div className="text-3xl font-black font-mono tracking-wide mb-2" style={{ color: "var(--navy)" }}>
-          {report.problemCode || "Submitted"}
-        </div>
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>{t("success.save_hint")}</p>
-        <p className="text-xs mt-3 font-semibold" style={{ color: "var(--text)" }}>{report.category}: {report.description}</p>
-      </Card>
-      <div className="flex gap-3 w-full max-w-xs">
-        <Btn onClick={() => onNav("tracking")} className="flex-1" icon={<MapPin size={16} />}>
-          {t("success.trackbtn")}
-        </Btn>
-        <Btn variant="secondary" onClick={() => onNav(getHomeDashboard(role))} className="flex-1" icon={<Home size={16} />}>
-          {t("success.homebtn")}
-        </Btn>
-      </div>
-    </div>
-  );
-}
-
-// ─── TRACKING ─────────────────────────────────────────────────────────────────
-function TrackingScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, role } = useApp();
-  const { report } = useApp();
-  const timeline = [
-    { label: "Challenge Submitted", sub: report.problemCode || "Pending", done: true },
-    { label: "AI Processed", sub: report.aiAnalysis ? `Priority: ${report.aiAnalysis.priority_score || 0}/100` : "Pending", done: !!report.aiAnalysis, active: !report.aiAnalysis },
-    { label: "Government Verified", sub: "District Level Verification", done: report.status === "VERIFIED" || report.status === "SOLVED", active: report.status === "PENDING" && !!report.aiAnalysis, pending: !report.aiAnalysis },
-    { label: "Solution Implemented", sub: "Solution marked as deployed", done: report.status === "SOLVED", pending: report.status !== "SOLVED" }
+  const team = [
+    { role: "Faculty Mentor", name: "Dr. Priya Rajan", dept: "Civil Eng.", icon: <User size={20} color="white" /> },
+    { role: "Student — Civil", name: "Arjun Mahato", dept: "B.Tech Civil, Yr 4", icon: <User size={20} color="white" /> },
+    { role: "Student — Environmental", name: "Sunita Oraon", dept: "M.Sc. Env Sci", icon: <User size={20} color="white" /> },
+    { role: "Student — IoT", name: "Rajan Kumar", dept: "B.Tech ECE, Yr 3", icon: <User size={20} color="white" /> },
+    { role: "Student — Data", name: "Priti Soren", dept: "M.Tech CS, Yr 1", icon: <User size={20} color="white" /> },
   ];
   return (
-    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
-      <NavBar role={role} screen="tracking" onNav={onNav} />
-      <div className="px-4 py-5" style={{ background: "var(--nav-bg)" }}>
-        <button onClick={() => onNav(getHomeDashboard(role))} className="flex items-center gap-1 text-xs mb-3 transition-all"
-          style={{ color: "rgba(255,255,255,0.7)" }}>
-          <ArrowLeft size={13} /> Back to Dashboard
-        </button>
-        <h1 className="text-xl font-black text-white">{t("track.title")}</h1>
-        <div className="mt-2 px-3 py-1 rounded-lg inline-block" style={{ background: "rgba(255,255,255,0.1)" }}>
-          <span className="text-xs font-mono text-white">{report.problemCode || "Your submitted challenge"}</span>
-        </div>
-
-        {/* Mitra Tracking Guidance - ONLY for Individual Citizen */}
-        {role === "citizen" && (
-          <div className="mt-3 p-3 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/15">
-            <MitraAssistant
-              size="compact"
-              variant="compact"
-              message={t("mitra.rep.track")}
-              badgeText="Mitra • Live Status"
-              
-            />
-          </div>
-        )}
-      </div>
-      <div className="px-4 py-5">
-        <Card className="p-4 mb-5">
-          <div className="flex items-center justify-between mb-2">
-            <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>{report.description || "Your submitted problem"}</p>
-            <StatusBadge status="in-progress" />
-          </div>
-          <p className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-            <MapPin size={11} /> {[report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Map-selected location"}
-          </p>
-          {report.files.length > 0 && <div className="flex gap-2 mt-3 overflow-x-auto">{report.files.map((file, index) => file.type.startsWith("image/") ? <img key={`${file.name}-${index}`} src={report.previews[index]} alt={file.name} className="w-16 h-16 rounded-lg object-cover border" style={{ borderColor: "var(--border)" }} /> : <div key={`${file.name}-${index}`} className="w-16 h-16 rounded-lg border flex flex-col items-center justify-center text-[9px] p-1" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}><Video size={18} /><span className="truncate w-full text-center">{file.name}</span></div>)}</div>}
-          <div className="mt-3 p-3 rounded-xl" style={{ background: "var(--success-bg)" }}>
-            <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: "var(--green)" }}>
-              <GraduationCap size={13} /> Your {report.category || "selected"} problem is being reviewed.
-            </p>
-            <p className="text-xs mt-1" style={{ color: "var(--success)" }}>
-              Your submitted report is safely recorded and will move through review and matching.
-            </p>
-          </div>
-        </Card>
-
-        <h2 className="font-bold text-sm mb-4" style={{ color: "var(--text)" }}>Progress Timeline</h2>
-        {timeline.map((item, i) => (
-          <div key={i} className="flex gap-4 mb-5">
-            <div className="flex flex-col items-center">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center z-10 flex-shrink-0"
-                style={{
-                  background: item.done ? "var(--success)" : item.active ? "var(--amber)" : "var(--border)",
-                  color: item.done ? "white" : item.active ? "var(--navy)" : "var(--text-muted)",
-                  border: item.active ? "3px solid var(--navy)" : "none"
-                }}>
-                {item.done ? <CheckCircle size={16} /> : item.active ? <Activity size={14} /> : <Clock size={14} />}
-              </div>
-              {i < timeline.length - 1 && (
-                <div className="w-0.5 h-8 mt-1"
-                  style={{ background: item.done ? "var(--success)" : "var(--border)" }} />
-              )}
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-sm"
-                style={{ color: item.done ? "var(--text)" : item.active ? "var(--navy)" : "var(--text-muted)" }}>
-                {item.label}
-              </p>
-              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{item.sub}</p>
-              {item.active && (
-                <div className="flex gap-2 mt-2">
-                  <Btn variant="secondary" onClick={() => onNav("feedback")} className="text-xs px-3 py-1.5"
-                    icon={<MessageSquare size={12} />}>
-                    {t("btn.feedback")}
-                  </Btn>
-                  <Btn variant="ghost" className="text-xs px-3 py-1.5" icon={<Phone size={12} />}>
-                    Contact
-                  </Btn>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── PROBLEMS NEAR ME ─────────────────────────────────────────────────────────
-function ProblemsNearMeScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, role, setSelectedTrackingId } = useApp();
-  const [problems, setProblems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [locationError, setLocationError] = useState("");
-
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { getProblemsNearMe } = require("./api");
-          getProblemsNearMe(pos.coords.latitude, pos.coords.longitude)
-            .then((data: any) => { setProblems(data.problems || []); setLoading(false); })
-            .catch((err: any) => { console.error(err); setLoading(false); });
-        },
-        (err) => {
-          setLocationError("Could not access location.");
-          setLoading(false);
-        }
-      );
-    } else {
-      setLocationError("Geolocation not supported.");
-      setLoading(false);
-    }
-  }, []);
-
-  return (
-    <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
-      <NavBar role={role} screen="problems-near-me" onNav={onNav} />
-      <div className="px-4 py-5" style={{ background: "var(--nav-bg)" }}>
-        <button onClick={() => onNav(getHomeDashboard(role))} className="flex items-center gap-1 text-xs mb-3 transition-all"
-          style={{ color: "rgba(255,255,255,0.7)" }}>
-          <ArrowLeft size={13} /> Back to Dashboard
-        </button>
-        <h1 className="text-xl font-black text-white flex items-center gap-2">
-          <Map size={20} color="var(--amber)" /> {t("cit.nearby")}
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={() => onNav("uni-challenge-detail")} className="text-xs flex items-center gap-1 mb-4"
+          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
+        <h1 className="text-xl font-black flex items-center gap-2 mb-1" style={{ color: "var(--navy)" }}>
+          <Users size={22} /> Team Formation
         </h1>
-      </div>
-      
-      {loading ? (
-        <div className="p-10 flex justify-center"><Loader className="animate-spin" color="var(--amber)" /></div>
-      ) : (
-        <>
-          <div className="mx-4 mt-4 rounded-2xl overflow-hidden map-placeholder h-48 relative">
-            {problems.map((p, i) => (
-              <div key={i} className="absolute z-10" style={{ top: `${20 + (i * 15) % 60}%`, left: `${20 + (i * 20) % 60}%` }}>
-                <div className="w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center border-2"
-                  style={{ borderColor: "var(--navy)" }}>
-                  <MapPin size={16} color="var(--error)" />
-                </div>
+        <p className="text-xs mb-6" style={{ color: "var(--text-muted)" }}>AI-assisted multidisciplinary team for JH-WTR-1024</p>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <Card className="p-5 mb-4">
+              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Required Skills</h3>
+              <div className="flex flex-wrap gap-2">
+                {["Civil Engineering", "Environmental Science", "IoT / Sensors", "Data Analytics"].map(s => (
+                  <span key={s} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                    style={{ background: "#EFF6FF", color: "var(--navy)", border: "1px solid #BFDBFE" }}>{s}</span>
+                ))}
               </div>
-            ))}
-            <div className="absolute top-2 right-2 z-10 bg-white rounded-lg px-2 py-1 text-xs font-semibold shadow"
-              style={{ color: "var(--navy)" }}>5 km radius</div>
+            </Card>
+            
           </div>
-          
-          <div className="px-4 py-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-sm" style={{ color: "var(--text)" }}>{problems.length} problems nearby</h2>
-              <button className="p-2 rounded-lg" style={{ background: "var(--input-bg)", color: "var(--text-muted)" }}>
-                <Filter size={16} />
-              </button>
-            </div>
-            
-            {locationError && <p className="text-xs text-center text-red-500 mb-4">{locationError}</p>}
-            
-            <div className="space-y-3">
-              {problems.map((p, i) => (
-                <Card key={i} className="p-4 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(p.id || p.problem_code); onNav("tracking"); }}>
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-semibold text-sm flex-1 pr-4 line-clamp-1" style={{ color: "var(--text)" }}>{p.description || p.title}</h3>
-                    <StatusBadge status={p.status === "SOLVED" ? "resolved" : (p.status === "IN_PROGRESS" ? "in-progress" : "under-review")} />
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-1 font-medium" style={{ color: "var(--navy)" }}>
-                      <MapPin size={12} /> {Math.round(p.distance / 100) / 10 || "0.5"} km
-                    </span>
-                    <span style={{ color: "var(--text-muted)" }}>{p.category || p.category_name}</span>
-                  </div>
-                </Card>
+          <div className="space-y-4">
+            <Card className="p-5">
+              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Industry Partner</h3>
+              <div className="p-3 rounded-xl" style={{ background: "var(--success-bg)", border: "1px solid var(--green)" }}>
+                <p className="text-xs font-bold mb-1 flex items-center gap-1" style={{ color: "var(--green)" }}>
+                  <Factory size={13} /> AquaSense IoT Solutions — 89% match
+                </p>
+                <p className="text-xs" style={{ color: "var(--text)" }}>IoT hardware + field testing support</p>
+                <Btn variant="secondary" className="mt-2 text-xs w-full">Invite Partner</Btn>
+              </div>
+            </Card>
+            <Card className="p-5">
+              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Team Summary</h3>
+              {[["Faculty Mentors", "1"], ["Students", "4"], ["Industry Partner", "1 (pending)"], ["Skills Covered", "4/4"]].map(([k, v]) => (
+                <div key={k} className="flex justify-between text-sm py-1.5 border-b last:border-0"
+                  style={{ borderColor: "var(--border)" }}>
+                  <span style={{ color: "var(--text-muted)" }}>{k}</span>
+                  <span className="font-bold" style={{ color: k === "Skills Covered" ? "var(--success)" : "var(--text)" }}>{v}</span>
+                </div>
               ))}
-            </div>
+            </Card>
+            <Btn onClick={() => onNav("proposal")} className="w-full py-4 text-base" icon={<ArrowRight size={18} />}>
+              Create Team & Write Proposal
+            </Btn>
+            <Btn variant="ghost" className="w-full" icon={<RefreshCw size={16} />}>Change Members</Btn>
           </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function FeedbackScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  const [rating, setRating] = useState(0);
-  const [submitted, setSubmitted] = useState(false);
-
-  if (submitted) return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center"
-      style={{ background: "var(--bg)" }}>
-      <div className="w-20 h-20 rounded-full flex items-center justify-center text-4xl mb-4"
-        style={{ background: "var(--success-bg)" }}>
-        <ThumbsUp size={40} color="var(--success)" />
+        </div>
       </div>
-      <h1 className="text-xl font-black mb-2" style={{ color: "var(--success)" }}>{t("feedback.thanks")}</h1>
-      <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>Your feedback has been submitted.</p>
-      <Btn onClick={() => onNav("tracking")} icon={<ArrowLeft size={16} />}>Back to Tracking</Btn>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen px-4 py-6" style={{ background: "var(--bg)" }}>
-      <button onClick={() => onNav("tracking")} className="flex items-center gap-1.5 text-sm mb-6"
-        style={{ color: "var(--text-muted)" }}>
-        <ArrowLeft size={15} /> {t("btn.back")}
-      </button>
-      <h1 className="text-xl font-black mb-1 flex items-center gap-2" style={{ color: "var(--navy)" }}>
-        <Star size={22} /> {t("feedback.title")}
-      </h1>
-      <p className="text-xs mb-6" style={{ color: "var(--text-muted)" }}>JH-WTR-1024 — Handpump kharab hai</p>
-      <Card className="p-5 max-w-sm mx-auto">
-        <h3 className="font-bold text-sm mb-4" style={{ color: "var(--text)" }}>
-          How satisfied are you with the progress?
-        </h3>
-        <div className="flex justify-center gap-2 mb-5">
-          {[1, 2, 3, 4, 5].map(s => (
-            <button key={s} onClick={() => setRating(s)} className="transition-all hover:scale-110 active:scale-95">
-              <Star size={32} fill={s <= rating ? "var(--amber)" : "transparent"}
-                color={s <= rating ? "var(--amber)" : "var(--border)"} />
-            </button>
-          ))}
-        </div>
-        <textarea rows={4} placeholder="अपनी राय यहाँ लिखें… / Write your feedback here…"
-          className="w-full px-4 py-3 rounded-xl border text-sm outline-none resize-none mb-4"
-          style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-        <Btn onClick={() => setSubmitted(true)} className="w-full" disabled={rating === 0}
-          icon={<SendHorizontal size={16} />}>
-          {t("feedback.submit")}
-        </Btn>
-      </Card>
     </div>
   );
 }
 
-// ─── GLOBAL LOADING OVERLAY ───────────────────────────────────────────────────
-function NavJharLoadingOverlay({ show }: { show: boolean }) {
-  const { dark } = useApp();
-  if (!show) return null;
-
+// ─── PROPOSAL ────────────────────────────────────────────────────────────────
+function ProjectHealthScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t } = useApp();
+  const factors = [
+    { label: "Milestone Progress", score: 75, icon: <Clock size={16} /> },
+    { label: "Deliverables Submitted", score: 90, icon: <FileText size={16} /> },
+    { label: "Mentor Engagement", score: 88, icon: <User size={16} /> },
+    { label: "Testing Progress", score: 55, icon: <Activity size={16} /> },
+    { label: "Timeline Adherence", score: 70, icon: <TrendingUp size={16} /> },
+    { label: "Risk Level", score: 80, icon: <AlertTriangle size={16} /> },
+  ];
   return (
-    <div
-      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center transition-all duration-300"
-      style={{
-        background: dark ? "rgba(15, 25, 35, 0.85)" : "rgba(247, 249, 251, 0.88)",
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
-      }}
-    >
-      <div
-        className="p-6 sm:p-8 rounded-3xl flex flex-col items-center shadow-2xl border"
-        style={{
-          background: dark ? "rgba(22, 34, 50, 0.95)" : "rgba(255, 255, 255, 0.95)",
-          borderColor: dark ? "rgba(255, 255, 255, 0.12)" : "rgba(18, 59, 99, 0.12)",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-        }}
-      >
-        {/* Continuously Rotating NavJhar Brand Logo */}
-        <div className="relative w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center">
-          <div
-            className="absolute inset-0 rounded-full blur-xl opacity-35 animate-pulse"
-            style={{ background: "radial-gradient(circle, #2E6B4E 0%, #123B63 100%)" }}
-          />
-          <div className="w-16 h-16 sm:w-20 sm:h-20 animate-spin [animation-duration:1.8s]">
-            <NavJharLogo variant="icon" className="w-full h-full" />
-          </div>
-        </div>
-
-        {/* Loading Label with Bouncing Dots */}
-        <div className="mt-4 text-center">
-          <div
-            className="text-lg font-black tracking-wide flex items-center justify-center gap-0.5"
-            style={{ color: "var(--navy)" }}
-          >
-            <span>Loading</span>
-            <span className="inline-flex tracking-widest ml-0.5">
-              <span className="animate-bounce" style={{ animationDelay: "0ms" }}>.</span>
-              <span className="animate-bounce" style={{ animationDelay: "150ms" }}>.</span>
-              <span className="animate-bounce" style={{ animationDelay: "300ms" }}>.</span>
-            </span>
-          </div>
-          <p className="text-xs font-semibold mt-1" style={{ color: "var(--green)" }}>
-            हर समस्या का नया समाधान
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role="university" screen="project-lifecycle" onNav={onNav} />
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={() => onNav("project-lifecycle")} className="text-xs flex items-center gap-1 mb-4"
+          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
+        <h1 className="text-xl font-black flex items-center gap-2 mb-6" style={{ color: "var(--navy)" }}>
+          <Heart size={22} /> {t("proj.health")} Score
+        </h1>
+        <Card className="p-6 mb-5 text-center">
+          <ProgressRing value={82} size={120} stroke={10} />
+          <h2 className="text-2xl font-black mt-4" style={{ color: "var(--success)" }}>ON TRACK</h2>
+          <StatusBadge status="on-track" />
+          <p className="text-sm mt-3 max-w-md mx-auto" style={{ color: "var(--text-muted)" }}>
+            Testing progress is slower than expected and may affect deployment if not addressed soon.
           </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── MAIN APP ─────────────────────────────────────────────────────────────────
-
-function FilteredProblemsList({ title, color, problems, onBack, onNav }: { title: string; color: string; problems: any[]; onBack: () => void; onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  return (
-    <div className="min-h-screen pb-10 flex flex-col" style={{ background: "var(--bg)" }}>
-      <div className="px-4 py-4 flex items-center gap-3 sticky top-0 z-10" style={{ background: "var(--nav-bg)", color: "white" }}>
-        <button onClick={onBack} className="p-2 -ml-2 rounded-full" style={{ background: "rgba(255,255,255,0.1)" }}>
-          <ArrowLeft size={20} />
-        </button>
-        <h2 className="text-lg font-bold">{title}</h2>
-      </div>
-      <div className="p-4 flex-1">
-        <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color }}>{problems.length} PROBLEMS FOUND</h3>
-        {problems.length === 0 ? (
-          <div className="text-center py-10 opacity-50">
-            <CheckCircle size={40} className="mx-auto mb-3" />
-            <p>No problems in this status</p>
-          </div>
-        ) : (
+          <p className="text-xs mt-2 italic" style={{ color: "var(--text-muted)" }}>
+            This is an early-warning indicator, not a guaranteed prediction.
+          </p>
+        </Card>
+        <Card className="p-5 mb-5">
+          <h3 className="font-bold text-sm mb-4" style={{ color: "var(--text)" }}>Health Factor Breakdown</h3>
           <div className="space-y-3">
-            {problems.map((p, i) => (
-              <Card key={i} className="p-4 relative">
-                <div className="absolute top-4 right-4 text-xs font-bold px-2 py-1 rounded"
-                     style={{ background: `color-mix(in srgb, ${color} 15%, transparent)`, color }}>
-                  {p.status || "PENDING"}
+            {factors.map(f => (
+              <div key={f.label} className="flex items-center gap-3">
+                <span style={{ color: "var(--text-muted)", width: 18 }}>{f.icon}</span>
+                <div className="flex-1">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-medium" style={{ color: "var(--text)" }}>{f.label}</span>
+                    <span className="font-bold" style={{
+                      color: f.score >= 80 ? "var(--success)" : f.score >= 60 ? "var(--warning)" : "var(--error)"
+                    }}>{f.score}%</span>
+                  </div>
+                  <div className="h-2 rounded-full" style={{ background: "var(--border)" }}>
+                    <div className="h-2 rounded-full" style={{
+                      width: `${f.score}%`,
+                      background: f.score >= 80 ? "var(--success)" : f.score >= 60 ? "var(--warning)" : "var(--error)"
+                    }} />
+                  </div>
                 </div>
-                <h3 className="font-bold mb-1" style={{ color: "var(--text)", paddingRight: 80 }}>{p.title || p.description?.substring(0, 30)}</h3>
-                <p className="text-xs mb-3 line-clamp-2" style={{ color: "var(--text-muted)" }}>{p.description}</p>
-                
-              </Card>
+              </div>
             ))}
           </div>
-        )}
+        </Card>
+        <Card className="p-5" style={{ borderColor: "var(--warning)" }}>
+          <h3 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ color: "var(--warning)" }}>
+            <AlertTriangle size={15} /> Risk Alert
+          </h3>
+          <p className="text-sm mb-2" style={{ color: "var(--text)" }}>
+            Testing progress (55%) is below target (75%). Consider:
+          </p>
+          <ul className="space-y-1">
+            {["Allocating additional resources to testing", "Requesting a 1-week extension", "Running parallel tests where possible"].map(s => (
+              <li key={s} className="text-xs flex items-start gap-2" style={{ color: "var(--text-muted)" }}>
+                <ChevronRight size={12} className="mt-0.5 flex-shrink-0" /> {s}
+              </li>
+            ))}
+          </ul>
+        </Card>
       </div>
     </div>
   );
 }
 
-
-function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: string }) {
-  const { t } = useApp();
-  const [email, setEmail] = useState("Loading...");
+// ─── INDUSTRY DASHBOARD ───────────────────────────────────────────────────────
+function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t, setSelectedTrackingId } = useApp();
+  const profile = useProfileDisplay("industry");
+  const [recommended, setRecommended] = useState<any[]>([]);
+  const [myProjects, setMyProjects] = useState<any[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
 
   useEffect(() => {
-    import('./firebase/config').then(({ auth }) => {
-      if (auth.currentUser) setEmail(auth.currentUser.email || "No email");
-      else setEmail("Not logged in");
+    import('./api').then(({ getRecommendedProblems, getMyProblems }) => {
+      getRecommendedProblems().then(data => { if(data) setRecommended(data.problems || []); }).catch(console.error);
+      getMyProblems().then(data => { if(data) setMyProjects(data.problems || []); }).catch(console.error);
     });
   }, []);
+
+  if (selectedFilter) {
+    let fp = recommended;
+    if (selectedFilter.filterStr === "IN_PROGRESS") fp = myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED");
+    else if (selectedFilter.filterStr === "SOLVED") fp = myProjects.filter(p => p.status === "SOLVED");
+    else if (selectedFilter.filterStr === "SUBMITTED") fp = recommended.filter(p => p.status === "SUBMITTED" || p.status === "PENDING" || p.status === "UNDER_REVIEW");
+    
+    return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
+  }
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <NavBar role={role} screen="profile" onNav={onNav} />
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10 text-center">
-        <div className="w-24 h-24 mx-auto rounded-full bg-slate-200 flex items-center justify-center mb-4">
-          <User size={40} className="text-slate-400" />
+      <NavBar role="industry" screen="industry-dashboard" onNav={onNav} />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
+              <Factory size={22} /> {t("ind.dashboard")}
+            </h1>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{profile.name}</p>
+          </div>
         </div>
-        <h1 className="text-xl font-black text-slate-800 dark:text-white mb-1">{t("nav.profile")}</h1>
-        <p className="text-sm text-slate-500 mb-8">{email}</p>
-        
-        <Card className="p-4 text-left space-y-4">
-           <Btn variant="ghost" className="w-full justify-start text-red-500" onClick={() => {
-              import('./firebase/config').then(({ auth }) => {
-                import('firebase/auth').then(({ signOut }) => {
-                  signOut(auth).then(() => onNav("landing"));
-                });
-              });
-           }}>
-             <LogOut size={18} className="mr-2" /> Sign Out
-           </Btn>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          {[
+            { icon: <Bell size={18} />, label: "Recommended Projects", value: recommended.length.toString(), color: "var(--amber)", filterStr: "SUBMITTED" },
+            { icon: <Activity size={18} />, label: "Active Partnerships", value: myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length.toString(), color: "var(--navy)", filterStr: "IN_PROGRESS" },
+            { icon: <ThumbsUp size={18} />, label: "Completed", value: myProjects.filter(p => p.status === "SOLVED").length.toString(), color: "var(--success)", filterStr: "SOLVED" }
+          ].map(k => (
+             <div key={k.label} className="cursor-pointer active:scale-95 transition-all" onClick={() => setSelectedFilter({ title: k.label, color: k.color, filterStr: k.filterStr })}>
+               <KPICard icon={k.icon} label={k.label} value={k.value} color={k.color} />
+             </div>
+          ))}
+        </div>
+
+        <h2 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "var(--text)" }}>
+          <Lightbulb size={16} /> Recommended Projects (AI Matches)
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {recommended.map((p, i) => (
+            <Card key={i} className="p-5 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(p.problem_code); onNav("industry-project-detail"); }}>
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{p.title || p.description}</h3>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{p.category_name} • {[p.village, p.district].filter(Boolean).join(", ")}</p>
+                </div>
+                <div className="text-right">
+                  <div className="font-black text-2xl" style={{ color: "var(--success)" }}>{p.match_percentage || 89}%</div>
+                  <div className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>AI MATCH</div>
+                </div>
+              </div>
+              <div className="mb-4 space-y-1">
+                {(p.match_reasons || ["CSR Opportunity", "Scale potential"]).map((r: string, idx: number) => (
+                  <p key={idx} className="text-xs flex items-center gap-1.5 font-medium" style={{ color: "var(--success)" }}>
+                    <CheckCircle size={11} className="shrink-0" /> {r}
+                  </p>
+                 ))}
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <Btn onClick={(e) => { e.stopPropagation(); setSelectedTrackingId(p.problem_code); onNav("industry-project-detail"); }} variant="secondary" className="text-xs flex-1"
+                  icon={<Eye size={13} />}>View Details</Btn>
+              </div>
+            </Card>
+          ))}
+          {recommended.length === 0 && <div className="p-4 text-sm col-span-2" style={{ color: "var(--text-muted)" }}>No AI recommendations found based on your profile description.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IndustryProjectDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t } = useApp();
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role="industry" screen="industry-dashboard" onNav={onNav} />
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={() => onNav("industry-dashboard")} className="text-xs flex items-center gap-1 mb-4"
+          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
+        <h1 className="text-xl font-black mb-1" style={{ color: "var(--navy)" }}>Smart Irrigation Monitoring System</h1>
+        <p className="text-xs mb-6" style={{ color: "var(--text-muted)" }}>JH-WTR-1024 • BIT Mesra × Ranchi District</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 space-y-4">
+            {[
+              { t: "Problem", c: "40% water leakage in irrigation canal serving 500 farmers across 6 villages." },
+              { t: "Solution", c: "IoT-based real-time leak detection with flow sensors + canal lining restoration." },
+              { t: "Technology", c: "IoT sensors (Arduino/ESP32 + LoRa), cloud dashboard, GIS mapping, civil restoration." },
+              { t: "Expected Impact", c: "500 farmers, 40% → <10% water loss, ₹8L/year savings, replicable across 200+ canals." },
+            ].map(s => (
+              <Card key={s.t} className="p-4">
+                <h3 className="font-bold text-sm mb-2" style={{ color: "var(--text)" }}>{s.t}</h3>
+                <p className="text-sm" style={{ color: "var(--text)" }}>{s.c}</p>
+              </Card>
+            ))}
+          </div>
+          <div className="space-y-4">
+            <Card className="p-4 text-center">
+              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Industry Match</h3>
+              <ProgressRing value={89} size={80} color="var(--green)" />
+              <div className="mt-3 space-y-2 text-xs text-left">
+                {[["Domain Fit", "IoT + Agriculture"], ["Support Type", "Hardware + Tech"], ["Health", "82% ON TRACK"]].map(([k, v]) => (
+                  <div key={k} className="flex justify-between">
+                    <span style={{ color: "var(--text-muted)" }}>{k}</span>
+                    <span className="font-bold" style={{ color: "var(--text)" }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <Btn onClick={() => onNav("partnership-form")} className="w-full" icon={<Users size={16} />}>
+              {t("ind.mentorship")}
+            </Btn>
+            <Btn variant="secondary" className="w-full" icon={<TrendingUp size={16} />}>{t("ind.funding")}</Btn>
+            <Btn variant="ghost" className="w-full" icon={<Briefcase size={16} />}>Co-Develop</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PARTNERSHIP FORM ────────────────────────────────────────────────────────
+function PartnershipFormScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t } = useApp();
+  const [supports, setSupports] = useState<string[]>(["Mentorship", "Hardware"]);
+  const toggleSupport = (s: string) =>
+    setSupports(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  return (
+    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
+      <NavBar role="industry" screen="partnership-form" onNav={onNav} />
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={() => onNav("industry-project-detail")} className="text-xs flex items-center gap-1 mb-4"
+          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
+        <h1 className="text-xl font-black flex items-center gap-2 mb-6" style={{ color: "var(--navy)" }}>
+          <Users size={22} /> Partnership Offer
+        </h1>
+        <Card className="p-6 space-y-5">
+          {[
+            { label: "Organisation Name", val: "TechGrow Solutions Pvt. Ltd." },
+            { label: "Contact Person", val: "Sanjay Mehta, CTO" },
+            { label: "Email", val: "sanjay@techgrow.in" },
+            { label: "Expertise Area", val: "IoT Hardware, Embedded Systems, Agriculture Tech" },
+          ].map(f => (
+            <div key={f.label}>
+              <label className="block text-sm font-bold mb-1" style={{ color: "var(--text)" }}>{f.label}</label>
+              <input defaultValue={f.val}
+                className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            </div>
+          ))}
+          <div>
+            <label className="block text-sm font-bold mb-2" style={{ color: "var(--text)" }}>Support Type</label>
+            <div className="grid grid-cols-2 gap-2">
+              {["Mentorship", "Funding", "Hardware", "Infrastructure", "Field Testing", "Co-development", "Technology Transfer", "Training"].map(s => (
+                <button key={s} onClick={() => toggleSupport(s)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm border-2 text-left transition-all"
+                  style={{
+                    borderColor: supports.includes(s) ? "var(--green)" : "var(--border)",
+                    background: supports.includes(s) ? "var(--success-bg)" : "var(--card)",
+                    color: "var(--text)"
+                  }}>
+                  {supports.includes(s) ? <CheckCircle size={14} color="var(--green)" /> : <div className="w-3.5 h-3.5 rounded-full border" style={{ borderColor: "var(--border)" }} />}
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold mb-1" style={{ color: "var(--text)" }}>Budget (₹)</label>
+              <input defaultValue="1,50,000"
+                className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            </div>
+            <div>
+              <label className="block text-sm font-bold mb-1" style={{ color: "var(--text)" }}>Mentor Availability</label>
+              <input defaultValue="10 hrs/week"
+                className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            </div>
+          </div>
+          <Btn onClick={() => onNav("partnership-success")} className="w-full py-4 text-base"
+            icon={<SendHorizontal size={18} />}>
+            {t("ind.partner")}
+          </Btn>
         </Card>
       </div>
     </div>
   );
 }
+
+// ─── PARTNERSHIP SUCCESS ──────────────────────────────────────────────────────
+function PartnershipSuccessScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center"
+      style={{ background: "var(--bg)" }}>
+      <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
+        style={{ background: "var(--success-bg)" }}>
+        <Users size={40} color="var(--success)" />
+      </div>
+      <h1 className="text-xl font-black mb-2" style={{ color: "var(--success)" }}>Partnership Offer Submitted!</h1>
+      <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
+        TechGrow Solutions' offer has been sent to BIT Mesra. They will confirm within 3 working days.
+      </p>
+      <div className="flex gap-3">
+        <Btn onClick={() => onNav("industry-dashboard")}>Back to Dashboard</Btn>
+        <Btn variant="secondary" onClick={() => onNav("project-lifecycle")}>View Project</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ─── SOLUTION REPOSITORY ──────────────────────────────────────────────────────
+function SolutionRepoScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t } = useApp();
+  const [search, setSearch] = useState("");
+  const solutions = [
+    { title: "IoT-Based Irrigation Monitoring", cat: "Water / Agriculture", loc: "Kanke, Ranchi", uni: "BIT Mesra", beneficiaries: "2,500 farmers", status: "deployed" as const },
+    { title: "Mobile Health Diagnostic App", cat: "Healthcare", loc: "Dhanbad", uni: "AIIMS Deoghar", beneficiaries: "8,000 residents", status: "deployed" as const },
+    { title: "Solar Water Pump Controller", cat: "Water / Energy", loc: "Bokaro", uni: "NIT Jamshedpur", beneficiaries: "1,200 farmers", status: "deployed" as const },
+    { title: "Community Waste Segregation", cat: "Sanitation", loc: "Ranchi Urban", uni: "BIT Mesra", beneficiaries: "15,000 residents", status: "in-progress" as const },
+  ];
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role="govt" screen="solution-repo" onNav={onNav} />
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        <h1 className="text-xl font-black flex items-center gap-2 mb-1" style={{ color: "var(--navy)" }}>
+          <BookOpen size={22} /> {t("repo.title")}
+        </h1>
+        <p className="text-xs mb-5" style={{ color: "var(--text-muted)" }}>
+          Knowledge bank of deployed and reusable solutions for Jharkhand
+        </p>
+        <div className="flex gap-3 mb-5">
+          <div className="flex-1 relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder={t("repo.search")}
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm outline-none"
+              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+          </div>
+          <Btn variant="ghost" className="text-xs" icon={<Filter size={14} />}>Filter</Btn>
+        </div>
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
+          {["All", "Water", "Agriculture", "Healthcare", "Education", "Energy", "Sanitation"].map(f => (
+            <button key={f}
+              className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-all"
+              style={{
+                background: f === "All" ? "var(--navy)" : "var(--card)",
+                color: f === "All" ? "white" : "var(--text-muted)",
+                borderColor: "var(--border)"
+              }}>{f}</button>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {solutions.map((s, i) => (
+            <Card key={i} className="p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{s.title}</h3>
+                  <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                    <MapPin size={11} /> {s.loc} • <GraduationCap size={11} /> {s.uni}
+                  </p>
+                </div>
+                <StatusBadge status={s.status} />
+              </div>
+              <div className="flex gap-2 mb-3 flex-wrap">
+                <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{s.cat}</span>
+                <span className="text-xs px-2 py-0.5 rounded-lg font-semibold"
+                  style={{ background: "var(--success-bg)", color: "var(--success)" }}>
+                  <Users size={10} className="inline mr-0.5" />{s.beneficiaries}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Btn variant="secondary" onClick={() => onNav("solution-detail")} className="flex-1 text-xs"
+                  icon={<Eye size={13} />}>{t("repo.view")}</Btn>
+                <Btn onClick={() => onNav("solution-detail")} className="flex-1 text-xs"
+                  icon={<RefreshCw size={13} />}>{t("repo.reuse")}</Btn>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SOLUTION DETAIL ──────────────────────────────────────────────────────────
+function SolutionDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t } = useApp();
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role="govt" screen="solution-repo" onNav={onNav} />
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={() => onNav("solution-repo")} className="text-xs flex items-center gap-1 mb-4"
+          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> {t("repo.title")}</button>
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-black" style={{ color: "var(--navy)" }}>IoT-Based Irrigation Monitoring</h1>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>BIT Mesra × AquaSense IoT × Ranchi District</p>
+          </div>
+          <StatusBadge status="deployed" />
+        </div>
+
+        <div className="p-4 rounded-xl border mb-6 flex items-center gap-3"
+          style={{ background: "#EDE9FE", borderColor: "#C4B5FD" }}>
+          <RefreshCw size={20} color="#5B21B6" />
+          <div>
+            <p className="text-sm font-bold" style={{ color: "#5B21B6" }}>
+              This solution may be reusable for 4 similar challenges.
+            </p>
+            <p className="text-xs" style={{ color: "#6D28D9" }}>
+              Similar water problems found in Bokaro (2), Giridih (1), Hazaribagh (1).
+            </p>
+          </div>
+          <Btn className="ml-auto text-xs flex-shrink-0" onClick={() => onNav("govt-validation")}
+            icon={<ArrowRight size={13} />}>
+            Reuse / Adapt
+          </Btn>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 space-y-4">
+            {[
+              { t: "Problem Solved", c: "40% water leakage in main irrigation canal serving 500+ farmers. Persistent for 3 months." },
+              { t: "Solution Implemented", c: "IoT flow sensors at 12 strategic points. Cloud dashboard with real-time monitoring. Canal lining restored at 6 breach points." },
+              { t: "Technology Used", c: "Arduino Uno + LoRa sensors, MQTT cloud protocol, Node.js dashboard, GPS mapping, Portland cement canal lining." },
+              { t: "Deployment Guide", c: "Install sensors at canal entry/exit points. Configure LoRa network. Train local Panchayat maintenance team (4-hour training). Dashboard via mobile app." },
+            ].map(s => (
+              <Card key={s.t} className="p-4">
+                <h3 className="font-bold text-sm mb-2" style={{ color: "var(--text)" }}>{s.t}</h3>
+                <p className="text-sm" style={{ color: "var(--text)" }}>{s.c}</p>
+              </Card>
+            ))}
+          </div>
+          <div className="space-y-4">
+            <Card className="p-4">
+              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Impact Summary</h3>
+              {[
+                { l: "Farmers Benefited", v: "2,500" },
+                { l: "Villages Covered", v: "18" },
+                { l: "Water Loss Before", v: "40%" },
+                { l: "Water Loss After", v: "8%" },
+                { l: "Est. Annual Savings", v: "₹8L/year" },
+                { l: "Implementation Cost", v: "₹4.5L" },
+              ].map(item => (
+                <div key={item.l} className="flex justify-between text-sm py-1.5 border-b last:border-0"
+                  style={{ borderColor: "var(--border)" }}>
+                  <span style={{ color: "var(--text-muted)" }}>{item.l}</span>
+                  <span className="font-bold" style={{ color: "var(--text)" }}>{item.v}</span>
+                </div>
+              ))}
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── IMPACT DASHBOARD ─────────────────────────────────────────────────────────
+function ImpactDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t } = useApp();
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role="govt" screen="impact-dashboard" onNav={onNav} />
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
+            <TrendingUp size={22} /> Impact Dashboard
+          </h1>
+          <span className="text-xs px-2 py-1 rounded-lg" style={{ background: "var(--warning-bg)", color: "var(--warning)" }}>Demo Data</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          {[
+            { icon: <Users size={18} />, label: t("impact.people"), value: "2,42,000+", color: "var(--green)" },
+            { icon: <Map size={18} />, label: t("impact.villages"), value: "312", color: "var(--navy)" },
+            { icon: <Lightbulb size={18} />, label: t("impact.solutions"), value: "312", color: "#7C3AED" },
+            { icon: <TrendingUp size={18} />, label: t("impact.savings") + " (₹Cr)", value: "18.4", color: "#B45309" },
+          ].map(k => <KPICard key={k.label} {...k} />)}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <Card className="p-5">
+            <h3 className="font-bold text-sm mb-4" style={{ color: "var(--text)" }}>Before vs. After — Water</h3>
+            <div className="space-y-4">
+              {[
+                { label: "Canal Water Loss", before: 40, after: 8, unit: "%" },
+                { label: "Handpump Failures (Unresolved)", before: 85, after: 12, unit: "%" },
+                { label: "Irrigation Coverage", before: 45, after: 78, unit: "% of farmland" },
+              ].map(m => (
+                <div key={m.label}>
+                  <p className="text-xs font-semibold mb-2" style={{ color: "var(--text)" }}>{m.label}</p>
+                  <div className="space-y-1.5">
+                    <div>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span style={{ color: "var(--text-muted)" }}>Before</span>
+                        <span className="font-bold" style={{ color: "var(--error)" }}>{m.before}{m.unit}</span>
+                      </div>
+                      <div className="h-2.5 rounded-full" style={{ background: "var(--error-bg)" }}>
+                        <div className="h-2.5 rounded-full" style={{ width: `${m.before}%`, background: "var(--error)" }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span style={{ color: "var(--text-muted)" }}>After</span>
+                        <span className="font-bold" style={{ color: "var(--success)" }}>{m.after}{m.unit}</span>
+                      </div>
+                      <div className="h-2.5 rounded-full" style={{ background: "var(--success-bg)" }}>
+                        <div className="h-2.5 rounded-full" style={{ width: `${m.after}%`, background: "var(--success)" }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "var(--text)" }}>
+              <Star size={15} /> Citizen Feedback
+            </h3>
+            <div className="space-y-3">
+              {[
+                { name: "Ram Kumar, Bakri Bazar", rating: 5, text: "The handpump is fixed. Now we get water in the morning. Very happy!" },
+                { name: "Sunita Devi, Lalgutwa", rating: 4, text: "Canal water is much better now. My crop is growing well this season." },
+                { name: "Mukesh Oraon, Kanke", rating: 5, text: "The app is easy to use. Problem was fixed within 2 months!" },
+              ].map((r, i) => (
+                <div key={i} className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>{r.name}</span>
+                    <div className="flex">
+                      {[...Array(r.rating)].map((_, j) => <Star key={j} size={11} fill="var(--amber)" color="var(--amber)" />)}
+                    </div>
+                  </div>
+                  <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>"{r.text}"</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "var(--text)" }}>
+              <Leaf size={15} color="var(--green)" /> Environmental Impact
+            </h3>
+            <div className="space-y-3">
+              {[
+                { icon: <Droplets size={18} />, val: "48 Cr litres/year", label: "Water Conserved" },
+                { icon: <Leaf size={18} />, val: "1,240 tonnes/year", label: "CO₂ Avoided" },
+                { icon: <Zap size={18} />, val: "18,000 kWh/month", label: "Solar Generated" },
+                { icon: <Leaf size={18} />, val: "12,400+", label: "Trees Planted" },
+              ].map(e => (
+                <div key={e.label} className="flex items-center gap-3 p-3 rounded-xl"
+                  style={{ background: "var(--success-bg)" }}>
+                  <span style={{ color: "var(--green)" }}>{e.icon}</span>
+                  <div>
+                    <p className="text-sm font-bold" style={{ color: "var(--green)" }}>{e.val}</p>
+                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>{e.label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
 
 export default function App() {
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("jsic_lang") as Lang) || "en");
@@ -5003,8 +3506,8 @@ export default function App() {
         {screen === "org-victim-dashboard" && <OrgVictimDashboardScreen {...props} />}
         {screen === "org-solver-login" && <OrgSolverLoginScreen {...props} />}
         {screen === "org-solver-dashboard" && <OrgSolverDashboardScreen {...props} />}
-        {screen === "uni-login" && <UniLoginScreen {...props} />}
-        {screen === "industry-login" && <IndustryLoginScreen {...props} />}
+        {screen === "uni-login" && <OrgSolverLoginScreen {...props} />}
+        {screen === "industry-login" && <OrgSolverLoginScreen {...props} />}
         {screen === "citizen-dashboard" && <CitizenDashboardScreen {...props} />}
         {screen === "report-step1" && <ReportStep1Screen {...props} />}
         {screen === "report-step2" && <ReportStep2Screen {...props} />}

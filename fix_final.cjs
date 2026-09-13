@@ -1,19 +1,51 @@
-﻿const fs = require('fs');
-let app = fs.readFileSync('src/App.tsx', 'utf8');
+const fs = require('fs');
+let code = fs.readFileSync('src/App.tsx', 'utf8');
 
-// Replace Btn Props precisely
-app = app.replace(
-  /function Btn\(\{ children, variant = "primary", onClick, className = "", disabled = false, icon, type = "button" \}: \{\r?\n\s*children: React\.ReactNode; variant\?: "primary" \| "secondary" \| "ghost" \| "danger" \| "success" \| "nav";\r?\n\s*onClick\?: \(\) => void; className\?: string; disabled\?: boolean; icon\?: React\.ReactNode;\r?\n\s*\}\)/g,
-  'function Btn({ children, variant = "primary", onClick, className = "", disabled = false, icon, type = "button" }: {\n    children: React.ReactNode; variant?: "primary" | "secondary" | "ghost" | "danger" | "success" | "nav";\n    onClick?: () => void; className?: string; disabled?: boolean; icon?: React.ReactNode; type?: "button" | "submit" | "reset";\n  })'
+// AppCtx Context Provider Defaults
+code = code.replace(
+  'report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null, impactReport: null, status: undefined }, setReport: () => {},',
+  'report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null, impactReport: null, status: undefined }, setReport: () => {}, selectedTrackingId: null, setSelectedTrackingId: () => {},'
 );
 
-// Remove the `if (onNav) onNav("org-victim-dashboard");` at line 2844
-app = app.replace(/if \(onNav\) onNav\("org-victim-dashboard"\);/g, 'onNav("org-victim-dashboard");');
+// Add behind
+code = code.replaceAll(
+  '{ label: "Reviewed", pending: true, done: false }',
+  '{ label: "Reviewed", pending: true, done: false, behind: false }'
+);
+code = code.replaceAll(
+  '{ label: "Assigned", pending: true, done: false }',
+  '{ label: "Assigned", pending: true, done: false, behind: false }'
+);
+code = code.replaceAll(
+  '{ label: "Resolved", pending: true, done: false }',
+  '{ label: "Resolved", pending: true, done: false, behind: false }'
+);
+code = code.replaceAll(
+  '{ label: "Verification", pending: true, done: false }',
+  '{ label: "Verification", pending: true, done: false, behind: false }'
+);
+code = code.replaceAll(
+  '{ label: "Reported", done: true }',
+  '{ label: "Reported", done: true, behind: false }'
+);
+code = code.replaceAll(
+  '{ label: "Reviewed", active: true, done: false }',
+  '{ label: "Reviewed", active: true, done: false, behind: false }'
+);
 
-fs.writeFileSync('src/App.tsx', app);
+code = code.replaceAll(
+  'onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}',
+  'onClick={(e: React.MouseEvent) => { e.stopPropagation(); setIsOpen(false); }}'
+);
 
-let mitra = fs.readFileSync('src/components/MitraAssistant.tsx', 'utf8');
-mitra = mitra.replace(/interface MitraAssistantProps \{/g, 'interface MitraAssistantProps {\n  badgeText?: string;');
-fs.writeFileSync('src/components/MitraAssistant.tsx', mitra);
+code = code.replace(
+  'type Screen = "citizen-dashboard"',
+  'type Screen = "citizen-dashboard" | "govt-validation"'
+);
+code = code.replace(
+  'type Screen = "citizen-dashboard"',
+  'type Screen = "citizen-dashboard" | "govt-validation"'
+);
 
-console.log('Fixed everything');
+fs.writeFileSync('src/App.tsx', code);
+console.log("Fixed final tsc");
