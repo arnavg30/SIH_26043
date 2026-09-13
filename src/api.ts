@@ -63,6 +63,14 @@ export async function geocodeProblemAddress(query: string): Promise<GeocodedLoca
   return apiFetch(`/api/geocode?query=${encodeURIComponent(query.trim())}`);
 }
 
+export async function analyzeProblemAI(data: { text: string; latitude: string; longitude: string }) {
+  return apiFetch("/api/problems/ai-analyze", { 
+    method: "POST", 
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+}
+
 export async function submitProblem(data: FormData) {
   return apiFetch("/api/problems", { method: "POST", body: data });
 }
@@ -161,4 +169,28 @@ export async function saveUniProfile(data: {
     method: "PUT",
     body: JSON.stringify(data),
   });
+}
+
+export async function getMyProblems() {
+  return apiFetch('/api/problems/my');
+}
+
+export async function getRecommendedProblems() {
+  return apiFetch('/api/problems/recommended');
+}
+
+export async function acceptProblem(problemCode: string) {
+  return apiFetch(`/api/problems/${problemCode}/accept`, { method: "PATCH" });
+}
+
+export async function submitSolutionAI(problemCode: string, text: string) {
+  return apiFetch(`/api/problems/${problemCode}/solutions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+}
+
+export async function markSolved(problemCode: string) {
+  return apiFetch(`/api/problems/${problemCode}/mark-solved`, { method: "POST" });
 }

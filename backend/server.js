@@ -158,6 +158,12 @@ app.post("/api/auth/sync", verifyToken, async (req, res) => {
 
     let row;
     if (existing.rows[0]) {
+      // --- ENFORCE ROLE CONSISTENCY CONSTRAINT ---
+      if (existing.rows[0].sub_type !== subType) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({ message: `This email is already registered as a ${existing.rows[0].sub_type}. You cannot switch roles.` });
+      }
+
       const result = await client.query(
         `UPDATE users
          SET phone_number = COALESCE($2, phone_number),
@@ -171,6 +177,19 @@ app.post("/api/auth/sync", verifyToken, async (req, res) => {
       );
       row = result.rows[0];
     } else {
+      // --- ENFORCE EMAIL DOMAIN CONSTRAINT (ONLY FOR NEW REGISTRATIONS) ---
+      if (subType === 'UNIVERSITY') {
+        if (!email || (!email.endsWith('.edu') && !email.endsWith('.ac.in') && !email.endsWith('.edu.in'))) {
+          await client.query("ROLLBACK");
+          return res.status(403).json({ message: "University accounts must use a valid institutional email (.edu or .ac.in)." });
+        }
+      } else {
+        if (email && (email.endsWith('.edu') || email.endsWith('.ac.in') || email.endsWith('.edu.in'))) {
+          await client.query("ROLLBACK");
+          return res.status(403).json({ message: "Institutional emails (.edu or .ac.in) are strictly reserved for University accounts." });
+        }
+      }
+
       const result = await client.query(
         `INSERT INTO users
           (firebase_uid, user_type, sub_type, language_id, phone_number, email, is_verified)
@@ -380,18 +399,36 @@ app.put("/api/profile/localorg", verifyToken, async (req, res) => {
 
     const {
       organizationName, spocName, designation = "Representative",
-      district, block, panchayatArea, officeAddress, organizationContact,
+      district, block, panchayatArea, officeAddress, organizationContact, domainExpertise
     } = req.body || {};
 
     if (!clean(organizationName)) return res.status(400).json({ message: "Organization name is required" });
     if (!clean(spocName)) return res.status(400).json({ message: "SPOC name is required" });
     if (!clean(officeAddress)) return res.status(400).json({ message: "Office address is required" });
 
+    let aiExpertise = domainExpertise;
+    if (domainExpertise) {
+      try {
+        const fetch = require('node-fetch');
+        const aiRes = await fetch('http://127.0.0.1:8000/categorize-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: domainExpertise })
+        });
+        const aiData = await aiRes.json();
+        if (aiData && aiData.expertise && Array.isArray(aiData.expertise)) {
+          aiExpertise = aiData.expertise.join(', ');
+        }
+      } catch (e) {
+        console.error('AI Profile categorization failed:', e);
+      }
+    }
+
     await client.query("BEGIN");
     const result = await client.query(
       `INSERT INTO local_organizations
-        (user_id, organization_name, spoc_name, designation, district, block, panchayat_area, office_address, organization_contact)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        (user_id, organization_name, spoc_name, designation, district, block, panchayat_area, office_address, organization_contact, domain_expertise)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (user_id) DO UPDATE SET
         organization_name = EXCLUDED.organization_name,
         spoc_name = EXCLUDED.spoc_name,
@@ -401,18 +438,13 @@ app.put("/api/profile/localorg", verifyToken, async (req, res) => {
         panchayat_area = EXCLUDED.panchayat_area,
         office_address = EXCLUDED.office_address,
         organization_contact = EXCLUDED.organization_contact,
+        domain_expertise = EXCLUDED.domain_expertise,
         updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
       [
-        user.user_id,
-        clean(organizationName),
-        clean(spocName),
-        clean(designation) || "Representative",
-        clean(district) || "Ranchi",
-        clean(block) || "Ranchi Sadar",
-        clean(panchayatArea) || "",
-        clean(officeAddress),
-        clean(organizationContact) || user.phone_number || "",
+        user.user_id, clean(organizationName), clean(spocName), clean(designation),
+        clean(district) || null, clean(block) || null, clean(panchayatArea) || null,
+        clean(officeAddress), clean(organizationContact) || null, aiExpertise || null
       ]
     );
     await client.query("COMMIT");
@@ -442,6 +474,23 @@ app.put("/api/profile/organization", verifyToken, async (req, res) => {
     if (!clean(spocName)) return res.status(400).json({ message: "SPOC name is required" });
     if (!clean(registeredAddress)) return res.status(400).json({ message: "Registered address is required" });
 
+    let aiExpertise = domainExpertise;
+    if (domainExpertise) {
+      try {
+        const aiRes = await fetch('http://127.0.0.1:8000/categorize-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: domainExpertise })
+        });
+        const aiData = await aiRes.json();
+        if (aiData && aiData.expertise && Array.isArray(aiData.expertise)) {
+          aiExpertise = aiData.expertise.join(', ');
+        }
+      } catch (e) {
+        console.error('AI Profile categorization failed:', e);
+      }
+    }
+
     await client.query("BEGIN");
     const result = await client.query(
       `INSERT INTO organizations
@@ -464,7 +513,7 @@ app.put("/api/profile/organization", verifyToken, async (req, res) => {
         clean(spocName),
         clean(spocContact) || user.phone_number || "",
         clean(domain) || "Societal Innovation",
-        clean(domainExpertise) || "",
+        clean(aiExpertise) || "",
         clean(registeredAddress),
       ]
     );
@@ -495,6 +544,23 @@ app.put("/api/profile/industry", verifyToken, async (req, res) => {
     if (!clean(spocName)) return res.status(400).json({ message: "SPOC name is required" });
     if (!clean(companyAddress)) return res.status(400).json({ message: "Company address is required" });
 
+    let aiExpertise = domainExpertise;
+    if (domainExpertise) {
+      try {
+        const aiRes = await fetch('http://127.0.0.1:8000/categorize-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: domainExpertise })
+        });
+        const aiData = await aiRes.json();
+        if (aiData && aiData.expertise && Array.isArray(aiData.expertise)) {
+          aiExpertise = aiData.expertise.join(', ');
+        }
+      } catch (e) {
+        console.error('AI Profile categorization failed:', e);
+      }
+    }
+
     await client.query("BEGIN");
     const result = await client.query(
       `INSERT INTO industries
@@ -520,7 +586,7 @@ app.put("/api/profile/industry", verifyToken, async (req, res) => {
         clean(designation) || null,
         clean(officialEmail) || user.email || "",
         clean(phoneNumber) || null,
-        clean(domainExpertise) || "",
+        clean(aiExpertise) || "",
         clean(companyAddress),
         csrBudgetAvailable ? Number(csrBudgetAvailable) : null,
       ]
@@ -552,6 +618,23 @@ app.put("/api/profile/university", verifyToken, async (req, res) => {
     if (!clean(spocName)) return res.status(400).json({ message: "SPOC name is required" });
     if (!clean(institutionalAddress)) return res.status(400).json({ message: "Institutional address is required" });
 
+    let aiExpertise = domainExpertise;
+    if (domainExpertise) {
+      try {
+        const aiRes = await fetch('http://127.0.0.1:8000/categorize-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: domainExpertise })
+        });
+        const aiData = await aiRes.json();
+        if (aiData && aiData.expertise && Array.isArray(aiData.expertise)) {
+          aiExpertise = aiData.expertise.join(', ');
+        }
+      } catch (e) {
+        console.error('AI Profile categorization failed:', e);
+      }
+    }
+
     await client.query("BEGIN");
     const result = await client.query(
       `INSERT INTO universities
@@ -575,7 +658,7 @@ app.put("/api/profile/university", verifyToken, async (req, res) => {
         clean(spocNumber) || "",
         clean(officialEmail) || user.email || "",
         clean(institutionalAddress),
-        clean(domainExpertise) || "",
+        clean(aiExpertise) || "",
       ]
     );
     await client.query("COMMIT");
@@ -721,13 +804,13 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
     if (!cat.rows[0]) return res.status(400).json({ message: "Invalid category" });
 
     const code = makeProblemCode(cat.rows[0].category_name);
-    const result = await client.query(
-      `INSERT INTO problems
-       (problem_code, submitted_by, category_id, title, description, latitude, longitude,
-        district, block, panchayat_ward, landmark, site_address, reported_for,
-        beneficiary_name, beneficiary_phone, is_anonymous, severity)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-       RETURNING *`,
+      const result = await client.query(
+        `INSERT INTO problems
+         (problem_code, submitted_by, category_id, title, description, latitude, longitude,
+          district, block, panchayat_ward, landmark, site_address, reported_for,
+          beneficiary_name, beneficiary_phone, is_anonymous, severity, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'SUBMITTED')
+         RETURNING *`,
        [code, user.user_id, cat.rows[0].category_id, clean(title), clean(description),
  latitude === "" ? null : latitude,
  longitude === "" ? null : longitude,
@@ -790,17 +873,101 @@ app.get("/api/problems/my", verifyToken, async (req, res) => {
   try {
     const user = await getDbUser(req.user.uid);
     if (!user) return res.status(404).json({ message: "User not synced" });
-    const { rows } = await pool.query(
-      `SELECT p.*, c.category_name
-       FROM problems p
-       JOIN problem_categories c ON c.category_id = p.category_id
-       WHERE p.submitted_by = $1
-       ORDER BY p.created_at DESC`,
-      [user.user_id]
-    );
+    
+    let query = `
+      SELECT p.*, c.category_name
+      FROM problems p
+      JOIN problem_categories c ON c.category_id = p.category_id
+      WHERE p.submitted_by = $1
+      ORDER BY p.created_at DESC
+    `;
+    let params = [user.user_id];
+
+    if (user.sub_type === 'PANCHAYAT') {
+      const panchayat = await pool.query(`SELECT panchayat_name FROM panchayats WHERE user_id = $1`, [user.user_id]);
+      if (panchayat.rows.length > 0) {
+        query = `
+          SELECT p.*, c.category_name
+          FROM problems p
+          JOIN problem_categories c ON c.category_id = p.category_id
+          WHERE p.panchayat_ward ILIKE $1
+          ORDER BY p.created_at DESC
+        `;
+        params = [`%${panchayat.rows[0].panchayat_name}%`];
+      }
+    } else if (['INDUSTRY', 'UNIVERSITY', 'ORGANIZATION'].includes(user.sub_type)) {
+      query = `
+        SELECT p.*, c.category_name, pi.status as initiative_status, pi.proposed_solution
+        FROM problem_initiatives pi
+        JOIN problems p ON pi.problem_id = p.problem_id
+        JOIN problem_categories c ON c.category_id = p.category_id
+        WHERE pi.solver_user_id = $1
+        ORDER BY pi.created_at DESC
+      `;
+      params = [user.user_id];
+    }
+    const { rows } = await pool.query(query, params);
     res.json({ problems: rows });
   } catch (err) {
     res.status(500).json({ message: "Could not load your problems" });
+  }
+});
+
+// --- ACCEPT PROBLEM (SOLVER ACTION) ---
+app.patch("/api/problems/:problemCode/accept", verifyToken, async (req, res) => {
+  try {
+    const { problemCode } = req.params;
+    const { rowCount } = await pool.query(
+      `UPDATE problems SET status = 'ASSIGNED' WHERE problem_code = $1`,
+      [problemCode]
+    );
+    if (rowCount === 0) return res.status(404).json({ message: "Problem not found" });
+    res.json({ message: "Problem status updated to ASSIGNED" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error accepting problem" });
+  }
+});
+
+// --- RECOMMENDED PROBLEMS ROUTE ---
+app.get("/api/problems/recommended", verifyToken, async (req, res) => {
+  try {
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+    
+    let domains = [];
+    if (user.sub_type === "INDUSTRY") {
+      const pRes = await pool.query("SELECT domain_expertise FROM industries WHERE user_id = $1", [user.user_id]);
+      if (pRes.rows.length) domains = (pRes.rows[0].domain_expertise || "").split(',').map(d => d.trim()).filter(Boolean);
+    } else if (user.sub_type === "UNIVERSITY") {
+      const pRes = await pool.query("SELECT domain_expertise FROM universities WHERE user_id = $1", [user.user_id]);
+      if (pRes.rows.length) domains = (pRes.rows[0].domain_expertise || "").split(',').map(d => d.trim()).filter(Boolean);
+    } else if (user.sub_type === "LOCAL_ORGANIZATION" || user.sub_type === "NGO") {
+      const pRes = await pool.query("SELECT domain_expertise FROM local_organizations WHERE user_id = $1", [user.user_id]);
+      if (pRes.rows.length) domains = (pRes.rows[0].domain_expertise || "").split(',').map(d => d.trim()).filter(Boolean);
+    }
+
+    let query = `
+      SELECT p.*, c.category_name
+      FROM problems p
+      JOIN problem_categories c ON c.category_id = p.category_id
+      WHERE p.status IN ('SUBMITTED', 'UNDER_REVIEW')
+    `;
+    let params = [];
+    
+    if (domains.length > 0) {
+      const matchClauses = domains.map((d, i) => `($${i + 1} ILIKE '%' || c.category_name || '%' OR c.category_name ILIKE '%' || $${i + 1} || '%')`);
+      query += ` AND (${matchClauses.join(' OR ')})`;
+      params = domains;
+    }
+
+    query += ` ORDER BY p.created_at DESC LIMIT 50`;
+    
+    const { rows } = await pool.query(query, params);
+    res.json({ problems: rows });
+  } catch(e) { 
+    console.error(e);
+    res.status(500).json({ error: e.message }); 
   }
 });
 
@@ -895,15 +1062,179 @@ app.post("/api/problems/:problemId/feedback", verifyToken, async (req, res) => {
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       return res.status(400).json({ message: "rating must be an integer from 1 to 5" });
     }
+    const comments = clean(req.body?.comments) || null;
+    let sentiment = "NEUTRAL";
+    if (comments) {
+      try {
+        const fetch = require('node-fetch');
+        const aiRes = await fetch('http://127.0.0.1:8000/analyze-sentiment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: comments })
+        });
+        const aiData = await aiRes.json();
+        if (aiData && aiData.sentiment) {
+          sentiment = aiData.sentiment.toUpperCase();
+        }
+      } catch(e) {
+        console.error("AI Sentiment failed", e);
+      }
+    }
+
     const result = await pool.query(
-      `INSERT INTO problem_feedback (problem_id, user_id, rating, comments)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
-      [req.params.problemId, user.user_id, rating, clean(req.body?.comments) || null]
+      `INSERT INTO problem_feedback (problem_id, user_id, rating, comments, sentiment)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.params.problemId, user.user_id, rating, comments, sentiment]
     );
     res.status(201).json({ feedback: result.rows[0] });
   } catch (err) {
     res.status(500).json({ message: "Could not save feedback", error: err.message });
   }
+});
+
+// --- SUBMIT SOLUTION (SOLVER ACTION WITH AI STRUCTURING) ---
+app.post("/api/problems/:problemCode/solutions", verifyToken, async (req, res) => {
+  try {
+    const { problemCode } = req.params;
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ message: "Solution text is required" });
+
+    const user = await getDbUser(req.user.uid);
+    if (!user) return res.status(404).json({ message: "User not synced" });
+
+    // 1. Get problem id
+    const probRes = await pool.query(`SELECT problem_id FROM problems WHERE problem_code = $1`, [problemCode]);
+    if (probRes.rows.length === 0) return res.status(404).json({ message: "Problem not found" });
+    const problemId = probRes.rows[0].problem_id;
+
+    // 2. Call AI Service to structure the solution
+    let structuredData = { title: "Proposed Solution", timeline: "", resources_needed: "", feasibility_score: 0 };
+    try {
+      const fetch = require('node-fetch');
+      const aiRes = await fetch('http://127.0.0.1:8000/structure-solution', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      const aiData = await aiRes.json();
+      if (!aiData.error) {
+        structuredData = { ...structuredData, ...aiData };
+      }
+    } catch (e) {
+      console.error("AI Structure Solution failed:", e);
+    }
+
+    // 3. Save to database
+    await pool.query("BEGIN");
+    
+    // Insert into problem_initiatives
+    const initRes = await pool.query(
+      `INSERT INTO problem_initiatives 
+       (problem_id, solver_user_id, initiative_title, proposed_solution, expected_impact, estimated_budget, timeline_display, feasibility_score, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'IN_PROGRESS') RETURNING *`,
+      [problemId, user.user_id, structuredData.title || "Proposed Solution", text, structuredData.resources_needed || "", 0, structuredData.timeline || "", structuredData.feasibility_score || 0]
+    );
+
+    // Update problem status to IN_PROGRESS
+    await pool.query(
+      `UPDATE problems SET status = 'IN_PROGRESS' WHERE problem_id = $1`,
+      [problemId]
+    );
+
+    await pool.query("COMMIT");
+    res.json({ message: "Solution submitted and structured successfully", initiative: initRes.rows[0] });
+  } catch (err) {
+    await pool.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ message: "Error submitting solution" });
+  }
+});
+
+// --- MARK SOLVED (IMPACT REPORT AI) ---
+app.post("/api/problems/:problemCode/mark-solved", verifyToken, async (req, res) => {
+  try {
+    const { problemCode } = req.params;
+    await pool.query(`UPDATE problems SET status = 'SOLVED' WHERE problem_code = $1`, [problemCode]);
+    const probRes = await pool.query(`SELECT description FROM problems WHERE problem_code = $1`, [problemCode]);
+    const initRes = await pool.query(`SELECT proposed_solution FROM problem_initiatives pi JOIN problems p ON pi.problem_id = p.problem_id WHERE p.problem_code = $1`, [problemCode]);
+    let probDesc = probRes.rows[0]?.description || "";
+    let solDesc = initRes.rows[0]?.proposed_solution || "";
+    const fetch = require('node-fetch');
+    const aiRes = await fetch('http://127.0.0.1:8000/generate-impact-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challenge_data: { description: probDesc }, solution_data: { solution: solDesc }, feedback_list: [] })
+    });
+    const aiData = await aiRes.json();
+    const reportRes = await pool.query(
+      `INSERT INTO impact_reports (problem_code, title, summary, key_metrics, challenges_overcome) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [problemCode, "AI Impact Report", aiData.report || "No summary generated", "[]", ""]
+    );
+    res.json({ message: "Solved & Impact Report Generated", report: reportRes.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error generating report" });
+  }
+});
+
+// --- AI ANALYZE PROBLEM ---
+app.post("/api/problems/ai-analyze", verifyToken, async (req, res) => {
+  try {
+    const { text, latitude, longitude } = req.body;
+    let existing = [];
+    if (latitude && longitude) {
+      const lat = Number(latitude);
+      const lng = Number(longitude);
+      const radiusKm = 10;
+      const nearbyRes = await pool.query(
+        `SELECT problem_code, title, description, latitude, longitude,
+          (6371 * acos(LEAST(1, GREATEST(-1, cos(radians($1)) * cos(radians(latitude)) * cos(radians(longitude) - radians($2)) + sin(radians($1)) * sin(radians(latitude)))))) AS distance_km
+         FROM problems WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+         AND (6371 * acos(LEAST(1, GREATEST(-1, cos(radians($1)) * cos(radians(latitude)) * cos(radians(longitude) - radians($2)) + sin(radians($1)) * sin(radians(latitude)))))) <= $3`,
+        [lat, lng, radiusKm]
+      );
+      existing = nearbyRes.rows.map(r => ({ id: r.problem_code, text: r.description, location: "Nearby", coordinates: `${r.latitude},${r.longitude}` }));
+    }
+    const fetch = require('node-fetch');
+    const aiRes = await fetch('http://127.0.0.1:8000/categorize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, coordinates: `${latitude},${longitude}`, existing_problems: existing })
+    });
+    const aiData = await aiRes.json();
+    res.json(aiData);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error analyzing problem" });
+  }
+});
+
+// --- SOLUTION GET ROUTE ---
+app.get("/api/problems/:problemCode/solution", verifyToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM problem_initiatives pi JOIN problems p ON pi.problem_id = p.problem_id WHERE p.problem_code = $1", [req.params.problemCode]);
+    res.json({ solution: rows[0] || null });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- ADMIN ROUTES ---
+app.get("/api/admin/problems", async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT problem_code, title, status FROM problems ORDER BY created_at DESC`);
+    res.json({ problems: rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+app.get("/api/admin/impact-reports", async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM impact_reports ORDER BY generated_at DESC`);
+    res.json({ reports: rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/admin/problems/:problemCode/assign", async (req, res) => {
+  try {
+    await pool.query(`UPDATE problems SET status = 'ASSIGNED' WHERE problem_code = $1`, [req.params.problemCode]);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ---------------- Error handler ----------------
