@@ -1,3 +1,398 @@
+function NotificationsScreen({ onNav, role }: { onNav: (s: Screen) => void; role: string }) {
+  const { t } = useApp();
+  const [notifs, setNotifs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    import('./api').then(({ getNotifications }) => {
+      getNotifications()
+        .then(data => { setNotifs(data.notifications || []); setLoading(false); })
+        .catch(err => { console.error(err); setLoading(false); });
+    });
+  }, []);
+
+  const handleRead = async (id: number) => {
+    try {
+      const { markNotificationRead } = await import('./api');
+      await markNotificationRead(id);
+      setNotifs(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role={role} screen="notifications" onNav={onNav} />
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-5">
+        <h1 className="text-xl font-black mb-4 flex items-center gap-2 text-slate-800 dark:text-white">
+          <Bell size={22} color="var(--amber)" /> {t("btn.notifications")}
+        </h1>
+        {loading ? (
+          <div className="p-10 flex justify-center"><Loader className="animate-spin text-amber-500" /></div>
+        ) : (
+          <div className="space-y-3 pb-20">
+            {notifs.map((n, i) => (
+              <Card key={i} className={`p-4 cursor-pointer card-hover ${!n.is_read ? 'border-l-4 border-l-amber-500' : ''}`} onClick={() => { if(!n.is_read) handleRead(n.id); }}>
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-full" style={{ background: "rgba(245,158,11,0.1)" }}>
+                    <Bell size={18} color="var(--amber)" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-white">{n.title}</h4>
+                      <span className="text-xs text-slate-500">{new Date(n.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{n.message}</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+            {notifs.length === 0 && (
+              <div className="p-8 text-center text-slate-500">
+                <Bell size={40} className="mx-auto mb-3 opacity-20" />
+                <p>No notifications yet.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+function UniChallengeDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t, selectedTrackingId } = useApp();
+  const [problem, setProblem] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!selectedTrackingId) { setLoading(false); return; }
+    import('./api').then(({ getProblemDetails }) => {
+      getProblemDetails(selectedTrackingId)
+        .then(data => { setProblem(data.problem); setLoading(false); })
+        .catch(err => { console.error(err); setLoading(false); });
+    });
+  }, [selectedTrackingId]);
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader className="animate-spin text-amber-500" /></div>;
+  if (!problem) return <div className="p-10 text-center">Problem not found.</div>;
+
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={() => onNav("uni-dashboard")} className="text-xs flex items-center gap-1 mb-4"
+          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
+        <h1 className="text-xl font-black mb-1" style={{ color: "var(--navy)" }}>{problem.title || problem.description}</h1>
+        <p className="text-xs mb-6" style={{ color: "var(--text-muted)" }}>{problem.problem_code} • {[problem.village, problem.block, problem.district].filter(Boolean).join(", ")}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <Card className="p-5">
+              <h3 className="font-bold text-sm mb-2" style={{ color: "var(--text)" }}>Problem Description</h3>
+              <p className="text-sm" style={{ color: "var(--text)" }}>
+                {problem.description}
+              </p>
+            </Card>
+            <Card className="p-5">
+              <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: "var(--text)" }}>
+                <Layers size={15} /> Challenge Details
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                {[["Domain", problem.category_name], ["Severity", problem.severity || "Medium"],  ["Status", problem.status]].map(([k, v]) => (
+                  <div key={k} className="p-2 rounded-xl" style={{ background: "var(--bg)" }}>
+                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>{k}</p>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>{v}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+          <div className="space-y-4">
+            <Card className="p-4 text-center">
+              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>AI Match Score</h3>
+              <ProgressRing value={Math.floor(Math.random() * 20) + 75} size={90} />
+            </Card>
+            {problem.status !== 'SOLVED' && problem.status !== 'ASSIGNED' && problem.status !== 'IN_PROGRESS' && (
+              <Btn onClick={() => onNav("proposal")} className="w-full" icon={<CheckCircle size={16} />}>
+                Solve this Problem
+              </Btn>
+            )}
+            <Btn variant="secondary" onClick={() => onNav("team-formation")} className="w-full" icon={<Users size={16} />}>
+              Form Team
+            </Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function ProposalScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t, selectedTrackingId } = useApp();
+  const [inputText, setInputText] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  
+  const handleGenerate = async () => {
+    if (!inputText || !selectedTrackingId) return;
+    setGenerating(true);
+    try {
+      const { submitSolutionAI, acceptProblem } = await import('./api');
+      
+      // Accept the problem first (creates initiative)
+      await acceptProblem(selectedTrackingId);
+      
+      // Submit solution for AI processing
+      const res = await submitSolutionAI(selectedTrackingId, inputText);
+      if (res && res.solution) setResult(res.solution);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
+      <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={() => onNav("uni-challenge-detail")} className="text-xs flex items-center gap-1 mb-4"
+          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
+        <h1 className="text-xl font-black flex items-center gap-2 mb-1" style={{ color: "var(--navy)" }}>
+          <FileText size={22} /> Generate AI Proposal
+        </h1>
+        <p className="text-xs mb-6" style={{ color: "var(--text-muted)" }}>{selectedTrackingId}</p>
+        
+        {!result ? (
+          <Card className="p-6 space-y-5">
+            <div>
+              <label className="block text-sm font-bold mb-2" style={{ color: "var(--text)" }}>Brief Solution Description</label>
+              <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>Describe your solution approach, methodology, or paste document text here.</p>
+              <textarea rows={6} value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="E.g. We will use IoT sensors to detect leaks..."
+                className="w-full px-4 py-3 rounded-xl border text-sm outline-none resize-none"
+                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+            </div>
+            
+            <Btn onClick={handleGenerate} disabled={generating || !inputText} className="w-full" icon={generating ? <Loader className="animate-spin" size={16} /> : <Zap size={16} />}>
+              {generating ? "AI is structuring your proposal..." : "Generate Structured Proposal"}
+            </Btn>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            <Card className="p-5">
+               <h3 className="font-bold text-sm mb-2 text-green-600 flex items-center gap-2"><CheckCircle size={16}/> AI Structured Solution</h3>
+               <div className="space-y-4 mt-4">
+                 <div>
+                   <h4 className="font-bold text-xs text-slate-500">PROPOSED SOLUTION</h4>
+                   <p className="text-sm">{result.proposed_solution}</p>
+                 </div>
+                 <div>
+                   <h4 className="font-bold text-xs text-slate-500">TIMELINE</h4>
+                   <p className="text-sm">{result.timeline}</p>
+                 </div>
+                 <div>
+                   <h4 className="font-bold text-xs text-slate-500">RESOURCES NEEDED</h4>
+                   <p className="text-sm">{result.resources_needed}</p>
+                 </div>
+                 <div>
+                   <h4 className="font-bold text-xs text-slate-500">FEASIBILITY SCORE</h4>
+                   <div className="mt-2 text-2xl font-black text-amber-500">{result.feasibility_score}/100</div>
+                 </div>
+               </div>
+               
+               <Btn onClick={() => onNav("project-lifecycle")} className="w-full mt-6">Start Project</Btn>
+            </Card>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+function ProjectLifecycleScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t, selectedTrackingId } = useApp();
+  const [problem, setProblem] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!selectedTrackingId) { setLoading(false); return; }
+    import('./api').then(({ getProblemDetails }) => {
+      getProblemDetails(selectedTrackingId)
+        .then(data => { setProblem(data.problem); setLoading(false); })
+        .catch(err => { console.error(err); setLoading(false); });
+    });
+  }, [selectedTrackingId]);
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader className="animate-spin text-amber-500" /></div>;
+  if (!problem) return <div className="p-10 text-center">Project not found.</div>;
+
+  const milestones = [
+    { label: "Research & Survey", done: true },
+    { label: "Prototype Design", done: problem.status === "IN_PROGRESS" || problem.status === "SOLVED" },
+    { label: "Testing & Validation", active: problem.status === "ASSIGNED", done: problem.status === "SOLVED" },
+    { label: "Pilot Implementation", pending: problem.status !== "SOLVED", done: problem.status === "SOLVED" },
+    { label: "Full Deployment", pending: problem.status !== "SOLVED", done: problem.status === "SOLVED" },
+  ];
+  
+  const p = problem;
+  
+  return (
+    <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
+      <NavBar role="university" screen="project-lifecycle" onNav={onNav} />
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+        <button onClick={() => onNav("uni-dashboard")} className="flex items-center gap-1 text-xs mb-3" style={{ color: "var(--navy)" }}>
+          <ArrowLeft size={13} /> Back to Dashboard
+        </button>
+        <Card className="p-5 mb-6">
+          <div className="flex items-start justify-between">
+            <div className="flex-1 pr-4">
+              <h1 className="text-lg font-black" style={{ color: "var(--navy)" }}>{p.title || p.description}</h1>
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                {p.problem_code} • {p.category_name} • {[p.village, p.block, p.district].filter(Boolean).join(", ")}
+              </p>
+            </div>
+            <div className="text-right">
+              <StatusBadge status={p.status === "SOLVED" ? "resolved" : "in-progress"} />
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="flex justify-between text-xs mb-1">
+              <span style={{ color: "var(--text-muted)" }}>{t("proj.progress")}</span>
+              <span className="font-bold" style={{ color: "var(--green)" }}>{p.status === "SOLVED" ? "100" : (p.status === "IN_PROGRESS" ? "60" : "20")}%</span>
+            </div>
+            <div className="h-3 rounded-full" style={{ background: "var(--border)" }}>
+              <div className="h-3 rounded-full" style={{ width: p.status === "SOLVED" ? "100%" : (p.status === "IN_PROGRESS" ? "60%" : "20%"), background: "var(--green)" }} />
+            </div>
+          </div>
+          {p.status !== 'SOLVED' && (
+            <Btn onClick={async () => {
+              try {
+                const { markSolved } = await import('./api');
+                await markSolved(p.problem_code);
+                onNav("uni-dashboard");
+              } catch (err) { console.error(err); }
+            }} className="w-full mt-4 text-xs">Mark as Solved</Btn>
+          )}
+        </Card>
+
+        <h3 className="font-bold text-lg mb-4" style={{ color: "var(--navy)" }}>{t("proj.timeline")}</h3>
+        <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
+          {milestones.map((m, i) => (
+            <div key={i} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+              <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white bg-slate-300 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2"
+                style={{ background: m.done ? "var(--green)" : m.active ? "var(--amber)" : m.behind ? "var(--error)" : "var(--border)" }}>
+                {m.done && <CheckCircle size={16} color="white" />}
+                {m.active && <Activity size={16} color="white" />}
+                {m.behind && <AlertTriangle size={16} color="white" />}
+                {m.pending && <Clock size={16} color="var(--text-muted)" />}
+              </div>
+              <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl shadow border border-slate-100 bg-white">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="font-bold text-sm" style={{ color: "var(--text)" }}>{m.label}</div>
+                  <div className="text-xs" style={{ color: "var(--text-muted)", fontWeight: 500 }}>{m.done ? "Completed" : m.active ? "Active" : "Pending"}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t, setSelectedTrackingId } = useApp();
+  const profile = useProfileDisplay("university");
+  const [recommended, setRecommended] = useState<any[]>([]);
+  const [myProjects, setMyProjects] = useState<any[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
+
+  useEffect(() => {
+    getRecommendedProblems().then(data => { if(data) setRecommended(data.problems || []); }).catch(console.error);
+    getMyProblems().then(data => { if(data) setMyProjects(data.problems || []); }).catch(console.error);
+  }, []);
+
+  if (selectedFilter) {
+    let fp = recommended;
+    if (selectedFilter.filterStr === "IN_PROGRESS") fp = myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED");
+    else if (selectedFilter.filterStr === "SOLVED") fp = myProjects.filter(p => p.status === "SOLVED");
+    else if (selectedFilter.filterStr === "SUBMITTED") fp = recommended.filter(p => p.status === "SUBMITTED" || p.status === "PENDING" || p.status === "UNDER_REVIEW");
+    
+    return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
+  }
+
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
+              <GraduationCap size={22} /> {t("uni.dashboard")}
+            </h1>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{profile.name || "University"} {profile.detail ? `— ${profile.detail}` : ""}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          {[
+            { icon: <Bell size={18} />, label: "New Challenges", value: recommended.length.toString(), color: "var(--amber)", filterStr: "SUBMITTED" },
+            { icon: <Activity size={18} />, label: "Active Projects", value: myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length.toString(), color: "var(--navy)", filterStr: "IN_PROGRESS" },
+            { icon: <ThumbsUp size={18} />, label: "Completed", value: myProjects.filter(p => p.status === "SOLVED").length.toString(), color: "var(--success)", filterStr: "SOLVED" }
+          ].map(k => (
+             <div key={k.label} className="cursor-pointer active:scale-95 transition-all" onClick={() => setSelectedFilter({ title: k.label, color: k.color, filterStr: k.filterStr })}>
+               <KPICard icon={k.icon} label={k.label} value={k.value} color={k.color} />
+             </div>
+          ))}
+        </div>
+        
+        <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Recommended Challenges</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          {recommended.slice(0, 4).map((c, i) => (
+             <Card key={i} className="p-5 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(c.problem_code); onNav("uni-challenge-detail"); }}>
+               <div className="flex items-start justify-between mb-2">
+                 <div className="flex-1">
+                   <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.title || c.description}</h3>
+                   <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                     <MapPin size={11} /> {[c.village, c.block, c.district].filter(Boolean).join(", ")}
+                   </p>
+                 </div>
+                 <StatusBadge status={c.status === "SUBMITTED" ? "submitted" : "under-review"} />
+               </div>
+               <div className="flex gap-2 mb-3 flex-wrap">
+                 <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{c.category_name}</span>
+               </div>
+               <div className="flex gap-2">
+                 <Btn onClick={(e) => { e.stopPropagation(); setSelectedTrackingId(c.problem_code); onNav("uni-challenge-detail"); }} variant="ghost" className="flex-1 text-xs">View Details</Btn>
+               </div>
+             </Card>
+          ))}
+          {recommended.length === 0 && <div className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>No recommended challenges found.</div>}
+        </div>
+
+        <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Our Active Projects</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").map((c, i) => (
+             <Card key={i} className="p-5 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(c.problem_code); onNav("project-lifecycle"); }}>
+               <div className="flex items-start justify-between mb-2">
+                 <div className="flex-1">
+                   <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.title || c.description}</h3>
+                   <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                     <MapPin size={11} /> {[c.village, c.block, c.district].filter(Boolean).join(", ")}
+                   </p>
+                 </div>
+                 <StatusBadge status="in-progress" />
+               </div>
+               <div className="flex gap-2 mb-3 flex-wrap">
+                 <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{c.category_name}</span>
+               </div>
+               <div className="flex gap-2">
+                 <Btn onClick={(e) => { e.stopPropagation(); setSelectedTrackingId(c.problem_code); onNav("project-lifecycle"); }} className="flex-1 text-xs">Track Progress</Btn>
+               </div>
+             </Card>
+          ))}
+          {myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length === 0 && <div className="p-4 text-sm" style={{ color: "var(--text-muted)" }}>No active projects found.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
 import { useState, useEffect, useRef, createContext, useContext } from "react";
 import {
   Sun, Moon, Globe, ChevronRight, MapPin, Mic, MicOff, Keyboard, Paperclip,
@@ -1911,7 +2306,7 @@ function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         {/* Status grid (Citizen Style 2x2) */}
         <div className="grid grid-cols-2 gap-3 mb-5">
           {statuses.map(s => (
-            <Card key={s.label} className="p-3 flex items-center gap-3">
+            <Card key={s.label} className="p-3 flex items-center gap-3 cursor-pointer card-hover" onClick={() => setSelectedFilter({ title: s.label, color: s.color, filterStr: s.label.includes("Total") ? "ALL" : s.label.includes("Review") ? "PENDING" : s.label.includes("Progress") ? "IN_PROGRESS" : "SOLVED" })}>
               <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                 style={{ background: `color-mix(in srgb, ${s.color} 12%, transparent)`, color: s.color }}>
                 {s.icon}
@@ -2013,7 +2408,7 @@ function OrgVictimDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         {/* Status grid (Citizen Style 2x2) */}
         <div className="grid grid-cols-2 gap-3 mb-5">
           {statuses.map(s => (
-            <Card key={s.label} className="p-3 flex items-center gap-3">
+            <Card key={s.label} className="p-3 flex items-center gap-3 cursor-pointer card-hover" onClick={() => setSelectedFilter({ title: s.label, color: s.color, filterStr: s.label.includes("Total") ? "ALL" : s.label.includes("Review") ? "PENDING" : s.label.includes("Progress") ? "IN_PROGRESS" : "SOLVED" })}>
               <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                 style={{ background: `color-mix(in srgb, ${s.color} 12%, transparent)`, color: s.color }}>
                 {s.icon}
@@ -2311,23 +2706,30 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 // ─── ORG SOLVER DASHBOARD ─────────────────────────────────────────────────────
 function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
+  const { t, setSelectedTrackingId } = useApp();
   const profile = useProfileDisplay("org-solver");
-  const [problems, setProblems] = useState<any[]>([]);
+  const [recommended, setRecommended] = useState<any[]>([]);
+  const [myProjects, setMyProjects] = useState<any[]>([]);
   const [stats, setStats] = useState({ benefited: 0 });
   const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
+
   useEffect(() => {
-    getRecommendedProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error);
+    getRecommendedProblems().then(data => { if(data) setRecommended(data.problems || []); }).catch(console.error);
+    getMyProblems().then(data => { if(data) setMyProjects(data.problems || []); }).catch(console.error);
     import('./api').then(({ getStats }) => {
       getStats().then(data => { if (data && data.success) setStats(data); }).catch(console.error);
     });
   }, []);
+
   if (selectedFilter) {
-    let fp = problems;
-    if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS");
-    if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
+    let fp = recommended;
+    if (selectedFilter.filterStr === "IN_PROGRESS") fp = myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED");
+    else if (selectedFilter.filterStr === "SOLVED") fp = myProjects.filter(p => p.status === "SOLVED");
+    else if (selectedFilter.filterStr === "SUBMITTED") fp = recommended.filter(p => p.status === "SUBMITTED" || p.status === "PENDING" || p.status === "UNDER_REVIEW");
+    else fp = myProjects.concat(recommended);
     return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
   }
+
   return (
     <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
       <NavBar role="org-solver" screen="org-solver-dashboard" onNav={onNav} />
@@ -2339,12 +2741,12 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         {/* KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { icon: <Layers size={18} />, label: t("org.recommended"), value: problems.length.toString(), color: "var(--amber)", screen: "uni-dashboard" as Screen },
-            { icon: <Briefcase size={18} />, label: t("org.collabs"), value: problems.filter(p => p.status === "IN_PROGRESS").length.toString(), color: "var(--green)", screen: "project-lifecycle" as Screen },
-            { icon: <CheckCircle size={18} />, label: t("org.completed"), value: problems.filter(p => p.status === "SOLVED").length.toString(), color: "var(--success)", screen: "" as Screen },
-            { icon: <Users size={18} />, label: t("org.reach"), value: stats.benefited >= 1000 ? (stats.benefited / 1000).toFixed(1) + "K" : stats.benefited.toString(), color: "var(--navy)", screen: "" as Screen },
+            { icon: <Layers size={18} />, label: t("org.recommended"), value: recommended.length.toString(), color: "var(--amber)", filterStr: "SUBMITTED" },
+            { icon: <Briefcase size={18} />, label: t("org.collabs"), value: myProjects.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length.toString(), color: "var(--green)", filterStr: "IN_PROGRESS" },
+            { icon: <CheckCircle size={18} />, label: t("org.completed"), value: myProjects.filter(p => p.status === "SOLVED").length.toString(), color: "var(--success)", filterStr: "SOLVED" },
+            { icon: <Users size={18} />, label: t("org.reach"), value: stats.benefited >= 1000 ? (stats.benefited / 1000).toFixed(1) + "K" : stats.benefited.toString(), color: "var(--navy)", filterStr: "ALL" },
           ].map(k => (
-            <div key={k.label} onClick={() => setSelectedFilter({ title: k.label, color: k.color, filterStr: k.label.includes("Completed") || k.label.includes("Resolved") ? "SOLVED" : k.label.includes("Collab") || k.label.includes("Active") ? "IN_PROGRESS" : "ALL" })} className="cursor-pointer active:scale-95 transition-all">
+            <div key={k.label} onClick={() => setSelectedFilter({ title: k.label, color: k.color, filterStr: k.filterStr })} className="cursor-pointer active:scale-95 transition-all">
               <KPICard icon={k.icon} label={k.label} value={k.value} color={k.color} />
             </div>
           ))}
@@ -2363,59 +2765,40 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         {/* Top Recommended Challenges */}
         <h3 className="font-bold text-sm mt-6 mb-2" style={{ color: "var(--text)" }}>{t("org.recommended")}</h3>
         <div className="space-y-3">
-          <Card className="p-4 cursor-pointer card-hover" onClick={() => onNav("uni-challenge-detail")}>
-             <div className="flex justify-between items-start mb-2">
-               <div>
-                 <h4 className="font-bold text-sm" style={{ color: "var(--text)" }}>Handpump Broken — Ward 3</h4>
-                 <p className="text-xs" style={{ color: "var(--text-muted)" }}><MapPin size={10} className="inline mr-1"/> Kanke, Ranchi</p>
+          {recommended.slice(0, 3).map((c, i) => (
+             <Card key={i} className="p-4 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(c.problem_code); onNav("uni-challenge-detail"); }}>
+               <div className="flex justify-between items-start mb-2">
+                 <div>
+                   <h4 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.title || c.description}</h4>
+                   <p className="text-xs" style={{ color: "var(--text-muted)" }}><MapPin size={10} className="inline mr-1"/> {[c.village, c.block, c.district].filter(Boolean).join(", ")}</p>
+                 </div>
+                 <StatusBadge status={c.status === "SUBMITTED" ? "submitted" : "under-review"} />
                </div>
-               <span className="text-[10px] font-bold px-2 py-0.5 rounded-md" style={{ background: "var(--warning-bg)", color: "var(--warning)" }}>Under Review</span>
-             </div>
-             <p className="text-xs font-semibold" style={{ color: "var(--navy)" }}>Match Score: 92%</p>
-          </Card>
-          <Card className="p-4 cursor-pointer card-hover" onClick={() => onNav("uni-challenge-detail")}>
-             <div className="flex justify-between items-start mb-2">
-               <div>
-                 <h4 className="font-bold text-sm" style={{ color: "var(--text)" }}>Village Water Quality Issue</h4>
-                 <p className="text-xs" style={{ color: "var(--text-muted)" }}><MapPin size={10} className="inline mr-1"/> Gumla</p>
-               </div>
-               <span className="text-[10px] font-bold px-2 py-0.5 rounded-md" style={{ background: "var(--error-bg)", color: "var(--error)" }}>High Priority</span>
-             </div>
-             <p className="text-xs font-semibold" style={{ color: "var(--navy)" }}>Match Score: 88%</p>
-          </Card>
+             </Card>
+          ))}
+          {recommended.length === 0 && <div className="text-sm" style={{ color: "var(--text-muted)" }}>No recommendations right now.</div>}
         </div>
 
-        {/* Profile */}
-        <Card className="p-4 mt-6">
-          <div className="flex justify-between items-start mb-3">
-            <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{t("org.expertise")}</h3>
-            <button className="flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg" style={{ background: "rgba(255,255,255,0.05)", color: "var(--amber)" }}>
-              <Edit2 size={12} /> Update Profile
-            </button>
-          </div>
-          
-          <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>DOMAIN / SECTOR:</p>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {["Education", "Healthcare", "Rural Development"].map(t => (
-              <span key={t} className="text-xs px-2.5 py-1 rounded-lg font-medium"
-                style={{ border: "1px solid var(--border)", color: "var(--text)" }}>{t}</span>
-            ))}
-          </div>
-
-          <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>EXPERTISE:</p>
-          <div className="flex flex-wrap gap-2">
-            {["Community Mobilisation", "Water Management", "Sanitation", "NGO Network", "Field Implementation"].map(t => (
-              <span key={t} className="text-xs px-2.5 py-1 rounded-lg font-medium"
-                style={{ background: "#EFF6FF", color: "var(--navy)" }}>{t}</span>
-            ))}
-          </div>
-        </Card>
+        {/* Our Active Projects */}
+        <h3 className="font-bold text-sm mt-6 mb-2" style={{ color: "var(--text)" }}>Our Projects</h3>
+        <div className="space-y-3">
+          {myProjects.slice(0, 3).map((c, i) => (
+             <Card key={i} className="p-4 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(c.problem_code); onNav("project-lifecycle"); }}>
+               <div className="flex justify-between items-start mb-2">
+                 <div>
+                   <h4 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.title || c.description}</h4>
+                   <p className="text-xs" style={{ color: "var(--text-muted)" }}><MapPin size={10} className="inline mr-1"/> {[c.village, c.block, c.district].filter(Boolean).join(", ")}</p>
+                 </div>
+                 <StatusBadge status={c.status === "SOLVED" ? "resolved" : "in-progress"} />
+               </div>
+             </Card>
+          ))}
+          {myProjects.length === 0 && <div className="text-sm" style={{ color: "var(--text-muted)" }}>No active projects.</div>}
+        </div>
       </div>
     </div>
   );
 }
-
-// ─── UNI / INDUSTRY LOGINS ────────────────────────────────────────────────────
 function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, lang } = useApp();
   const [step, setStep] = useState<"email" | "verify" | "profile">("email");
@@ -4196,13 +4579,31 @@ function TrackingScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 // ─── PROBLEMS NEAR ME ─────────────────────────────────────────────────────────
 function ProblemsNearMeScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, role } = useApp();
-  const problems = [
-    { title: "Broken Handpump", dist: "1.2 km", village: "ABC Village", cat: "Water", status: "under-review" as const },
-    { title: "Road potholes near school", dist: "2.4 km", village: "Kanke Chowk", cat: "Roads", status: "submitted" as const },
-    { title: "No street lights", dist: "3.1 km", village: "Lalgutwa", cat: "Electricity", status: "in-progress" as const },
-    { title: "Open drainage canal", dist: "4.7 km", village: "Namkum", cat: "Sanitation", status: "resolved" as const },
-  ];
+  const { t, role, setSelectedTrackingId } = useApp();
+  const [problems, setProblems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [locationError, setLocationError] = useState("");
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { getProblemsNearMe } = require("./api");
+          getProblemsNearMe(pos.coords.latitude, pos.coords.longitude)
+            .then((data: any) => { setProblems(data.problems || []); setLoading(false); })
+            .catch((err: any) => { console.error(err); setLoading(false); });
+        },
+        (err) => {
+          setLocationError("Could not access location.");
+          setLoading(false);
+        }
+      );
+    } else {
+      setLocationError("Geolocation not supported.");
+      setLoading(false);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen pb-24" style={{ background: "var(--bg)" }}>
       <NavBar role={role} screen="problems-near-me" onNav={onNav} />
@@ -4215,1955 +4616,57 @@ function ProblemsNearMeScreen({ onNav }: { onNav: (s: Screen) => void }) {
           <Map size={20} color="var(--amber)" /> {t("cit.nearby")}
         </h1>
       </div>
-      <div className="mx-4 mt-4 rounded-2xl overflow-hidden map-placeholder h-48 relative">
-        {[{ top: "30%", left: "40%" }, { top: "55%", left: "65%" }, { top: "25%", left: "70%" }].map((p, i) => (
-          <div key={i} className="absolute z-10" style={{ top: p.top, left: p.left }}>
-            <div className="w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center border-2"
-              style={{ borderColor: "var(--navy)" }}>
-              <MapPin size={16} color="var(--error)" />
-            </div>
-          </div>
-        ))}
-        <div className="absolute top-2 right-2 z-10 bg-white rounded-lg px-2 py-1 text-xs font-semibold shadow"
-          style={{ color: "var(--navy)" }}>
-          <Navigation size={11} className="inline mr-1" /> You are here
-        </div>
-      </div>
-      <div className="px-4 mt-4 flex items-center justify-between mb-3">
-        <p className="text-sm font-bold" style={{ color: "var(--text)" }}>4 problems found nearby</p>
-        <button className="flex items-center gap-1 text-xs font-medium" style={{ color: "var(--navy)" }}>
-          <Filter size={13} /> Filter
-        </button>
-      </div>
-      <div className="px-4 space-y-3">
-        {problems.map((p, i) => (
-          <Card key={i} className="p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>{p.title}</p>
-                <p className="text-xs mt-1 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                  <MapPin size={11} /> {p.village} • {p.dist} away • {p.cat}
-                </p>
-                <div className="mt-2"><StatusBadge status={p.status} /></div>
-              </div>
-              <Btn variant="secondary" onClick={() => onNav("submit-success")}
-                className="ml-3 text-xs px-3 py-1.5 flex-shrink-0">
-                Same Problem?
-              </Btn>
-            </div>
-          </Card>
-        ))}
-      </div>
-      <MobileNav onNav={onNav} />
-    </div>
-  );
-}
-
-// ─── REPORT FOR SOMEONE ───────────────────────────────────────────────────────
-function ReportForSomeoneScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, role } = useApp();
-  const [sel, setSel] = useState<string | null>(null);
-  const opts = [
-    { icon: <User size={24} />, label: "Myself", sub: "Apni samasya" },
-    { icon: <Users size={24} />, label: "Another Person", sub: "Kisi aur ki samasya" },
-    { icon: <Building2 size={24} />, label: "Community", sub: "Gaon ki samasya" },
-    { icon: <Building size={24} />, label: "Panchayat / Local Body", sub: "Sarkari samasya" },
-  ];
-  return (
-    <div className="min-h-screen px-4 py-6" style={{ background: "var(--bg)" }}>
-      <button onClick={() => onNav(getHomeDashboard(role))} className="flex items-center gap-1.5 text-sm mb-6"
-        style={{ color: "var(--text-muted)" }}>
-        <ArrowLeft size={15} /> {t("btn.back")}
-      </button>
-      <h1 className="text-2xl font-black mb-1" style={{ color: "var(--text)" }}>Who are you reporting for?</h1>
-      <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>किसके लिए रिपोर्ट कर रहे हैं?</p>
-      <div className="space-y-3 mb-6">
-        {opts.map(o => (
-          <button key={o.label} onClick={() => setSel(o.label)}
-            className="w-full p-4 rounded-xl border-2 flex items-center gap-4 transition-all active:scale-95"
-            style={{
-              borderColor: sel === o.label ? "var(--green)" : "var(--border)",
-              background: sel === o.label ? "var(--success-bg)" : "var(--card)"
-            }}>
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-              style={{ background: sel === o.label ? "var(--success-bg)" : "var(--bg)", color: "var(--green)" }}>
-              {o.icon}
-            </div>
-            <div className="flex-1 text-left">
-              <div className="font-bold" style={{ color: "var(--text)" }}>{o.label}</div>
-              <div className="text-sm" style={{ color: "var(--text-muted)" }}>{o.sub}</div>
-            </div>
-            {sel === o.label && <CheckCircle size={20} color="var(--green)" />}
-          </button>
-        ))}
-      </div>
-      {sel && <Btn onClick={() => onNav("report-step1")} className="w-full py-4 text-base" icon={<ArrowRight size={18} />}>
-        Continue
-      </Btn>}
-    </div>
-  );
-}
-
-// ─── UNIVERSITY DASHBOARD ─────────────────────────────────────────────────────
-function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, setReport } = useApp();
-  const profile = useProfileDisplay("university");
-  const [problems, setProblems] = useState<any[]>([]);
-  const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
-  const [myProjects, setMyProjects] = useState<any[]>([]);
-
-  useEffect(() => {
-    import("./firebase/config").then(({ auth }) => {
-      const unsubscribe = auth.onAuthStateChanged((user) => {
-        if (user) {
-          getRecommendedProblems().then(data => {
-            setProblems(data.problems || []);
-          }).catch(console.error);
-          getMyProblems().then(data => {
-            setMyProjects(data.problems || []);
-          }).catch(console.error);
-        }
-      });
-      return () => unsubscribe();
-    });
-  }, []);
-
-  if (selectedFilter) {
-    let fp = problems;
-    if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS");
-    if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
-    return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
-  }
-
-
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
-              <GraduationCap size={22} /> {profile.name || t("uni.dashboard")}
-            </h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Innovation Partner</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
-          {[
-            { icon: <Bell size={18} />, label: "New Challenges", value: problems.length.toString(), color: "var(--amber)" },
-            { icon: <CheckCircle size={18} />, label: "Accepted", value: myProjects.length.toString(), color: "var(--green)" },
-            { icon: <Activity size={18} />, label: "Active Projects", value: myProjects.filter((p: any) => p.status === 'IN_PROGRESS' || p.status === 'ASSIGNED').length.toString(), color: "var(--navy)" },
-            { icon: <ThumbsUp size={18} />, label: "Completed", value: myProjects.filter((p: any) => p.status === 'SOLVED').length.toString(), color: "var(--success)" },
-            { icon: <AlertTriangle size={18} />, label: "At Risk", value: myProjects.filter((p: any) => p.status === 'AT_RISK').length.toString(), color: "var(--error)" },
-          ].map(k => <KPICard key={k.label} {...k} />)}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {problems.map((c, i) => (
-            <Card key={i} className="p-5">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.description || c.title || "Citizen Report"}</h3>
-                  <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                    <MapPin size={11} /> {c.district || "Map-selected location"}
-                  </p>
-                </div>
-                <StatusBadge status="new" />
-              </div>
-              <div className="flex gap-2 mb-3 flex-wrap">
-                <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{c.category_name}</span>
-                <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "var(--success-bg)", color: "var(--success)" }}>
-                  <Users size={10} className="inline mr-0.5" />High Impact
-                </span>
-              </div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="flex-1">
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>AI Match</p>
-                  <p className="text-sm font-black" style={{ color: "var(--success)" }}>{c.priority_score || 85}%</p>
-                </div>
-              </div>
-              <div className="flex gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                <Btn variant="secondary" className="flex-1 text-xs py-2" onClick={() => {
-                  setReport(curr => ({
-                    ...curr,
-                    problemCode: c.problem_code,
-                    status: c.status,
-                    description: c.description,
-                    category: c.category_name,
-                    district: c.district,
-                    block: c.block,
-                    panchayat: c.panchayat_ward,
-                    village: c.village,
-                    aiData: { category: c.category_name, priorityScore: c.priority_score }
-                  }));
-                  onNav("uni-challenge-detail");
-                }}>
-                  View Details
-                </Btn>
-                <Btn className="flex-1 text-xs py-2" onClick={async () => {
-                   await acceptProblem(c.problem_code);
-                   alert("You have accepted this challenge. The status is now IN PROGRESS!");
-                   getRecommendedProblems().then(data => setProblems(data.problems || []));
-                }}>
-                  Accept
-                </Btn>
-              </div>
-            </Card>
-          ))}
-          {problems.length === 0 && (
-             <p className="text-xs col-span-2 text-center py-5" style={{ color: "var(--text-muted)" }}>No new challenges found right now.</p>
-          )}
-        </div>
       
-          <h2 className="font-bold text-sm mb-3 mt-8" style={{ color: "var(--text)" }}>My Active Projects</h2>
-          {myProjects.length === 0 ? (
-            <p className="text-sm text-center py-4" style={{ color: "var(--text-muted)" }}>No active projects found.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {myProjects.map((c, i) => (
-                <Card key={i} className="p-5">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.description || c.title}</h3>
-                      <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                        <MapPin size={11} /> {c.district || "Location"}
-                      </p>
-                    </div>
-                    <StatusBadge status={c.initiative_status || c.status} />
-                  </div>
-                  <div className="mt-4 flex gap-2">
-                    <Btn variant="primary" className="text-xs flex-1" onClick={() => {
-                        setReport(curr => ({ ...curr, problemCode: c.problem_code, description: c.description }));
-                        onNav("solver-dashboard");
-                    }}>View Details</Btn>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-</div>
-    </div>
-  );
-}
-
-
-function UniChallengeDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, report } = useApp();
-  const [showSolutionModal, setShowSolutionModal] = useState(false);
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <SolutionModal isOpen={showSolutionModal} onClose={() => setShowSolutionModal(false)} problemCode={report.problemCode} />
-      <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
-        <button onClick={() => onNav("uni-dashboard")} className="text-xs flex items-center gap-1 mb-4"
-          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
-        <h1 className="text-xl font-black mb-1" style={{ color: "var(--navy)" }}>Village Irrigation Canal Leakage</h1>
-        <p className="text-xs mb-6" style={{ color: "var(--text-muted)" }}>JH-WTR-1024 • Kanke, Ranchi • Aug 28, 2026</p>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            <Card className="p-5">
-              <h3 className="font-bold text-sm mb-2" style={{ color: "var(--text)" }}>Problem Description</h3>
-              <p className="text-sm" style={{ color: "var(--text)" }}>
-                The main irrigation canal serving Bakri Bazar and surrounding villages has developed multiple
-                leak points. Approximately 40% of water is lost, severely impacting ~500 farmers across 6 villages.
-              </p>
-            </Card>
-            <Card className="p-5">
-              <h3 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: "var(--text)" }}>
-                <Layers size={15} /> Challenge DNA
-              </h3>
-              <div className="grid grid-cols-2 gap-2">
-                {[["Domain", "Water / Agriculture"], ["Severity", "High"],  ["Skills", "Civil + IoT"], ["Impact", "High"], ["Deadline", "Sep 30, 2026"]].map(([k, v]) => (
-                  <div key={k} className="p-2 rounded-xl" style={{ background: "var(--bg)" }}>
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>{k}</p>
-                    <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>{v}</p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-            <Card className="p-5">
-              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Recommended Industry Partners</h3>
-              {[
-                { name: "AquaSense IoT Solutions", match: 89, type: "IoT / Technology" },
-                { name: "Jharkhand Infrastructure Ltd.", match: 82, type: "Civil Construction" },
-              ].map(p => (
-                <div key={p.name} className="flex items-center justify-between py-2 border-b last:border-0"
-                  style={{ borderColor: "var(--border)" }}>
-                  <div>
-                    <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>{p.name}</p>
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>{p.type}</p>
-                  </div>
-                  <span className="font-black text-sm" style={{ color: "var(--green)" }}>{p.match}%</span>
-                </div>
-              ))}
-            </Card>
-          </div>
-          <div className="space-y-4">
-            <Card className="p-4 text-center">
-              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>AI Match Score</h3>
-              <ProgressRing value={92} size={90} />
-            </Card>
-            <Card className="p-4">
-              <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: "var(--success-bg)" }}>
-                <CheckCircle size={18} color="var(--success)" />
-                <div>
-                  <p className="text-xs font-bold" style={{ color: "var(--success)" }}>Verified & Approved</p>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>Ranchi Collectorate • Aug 30</p>
+      {loading ? (
+        <div className="p-10 flex justify-center"><Loader className="animate-spin" color="var(--amber)" /></div>
+      ) : (
+        <>
+          <div className="mx-4 mt-4 rounded-2xl overflow-hidden map-placeholder h-48 relative">
+            {problems.map((p, i) => (
+              <div key={i} className="absolute z-10" style={{ top: `${20 + (i * 15) % 60}%`, left: `${20 + (i * 20) % 60}%` }}>
+                <div className="w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center border-2"
+                  style={{ borderColor: "var(--navy)" }}>
+                  <MapPin size={16} color="var(--error)" />
                 </div>
               </div>
-            </Card>
-            <Btn onClick={() => setShowSolutionModal(true)} className="w-full" icon={<CheckCircle size={16} />}>
-              Submit AI Solution
-            </Btn>
-            <Btn variant="secondary" onClick={() => onNav("team-formation")} className="w-full" icon={<FileText size={16} />}>
-              Project Scoping
-            </Btn>
-            <Btn variant="ghost" className="w-full" icon={<MessageSquare size={16} />}>
-              Contact Government
-            </Btn>
+            ))}
+            <div className="absolute top-2 right-2 z-10 bg-white rounded-lg px-2 py-1 text-xs font-semibold shadow"
+              style={{ color: "var(--navy)" }}>5 km radius</div>
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── PROJECT COLLABORATION & SCOPING ──────────────────────────────────────────
-function TeamFormationScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  return (
-    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
-      <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
-        <button onClick={() => onNav("uni-challenge-detail")} className="text-xs flex items-center gap-1 mb-4 transition-all"
-          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
-        <h1 className="text-xl font-black flex items-center gap-2 mb-1" style={{ color: "var(--navy)" }}>
-          <Building2 size={22} /> Project Collaboration & Scoping
-        </h1>
-        <p className="text-xs mb-6" style={{ color: "var(--text-muted)" }}>Project scoping and partner alignment for JH-WTR-1024</p>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <Card className="p-5">
-              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Required Skills</h3>
-              <div className="flex flex-wrap gap-2">
-                {["Civil Engineering", "Environmental Science", "IoT / Sensors", "Data Analytics"].map(s => (
-                  <span key={s} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                    style={{ background: "#EFF6FF", color: "var(--navy)", border: "1px solid #BFDBFE" }}>{s}</span>
-                ))}
-              </div>
-            </Card>
-
-            <Card className="p-5">
-              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Project Scope & Objectives</h3>
-              <div className="space-y-2.5 text-xs" style={{ color: "var(--text)" }}>
-                <div className="p-2.5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
-                  <p className="font-bold mb-0.5" style={{ color: "var(--text)" }}>Phase 1: Field Assessment</p>
-                  <p style={{ color: "var(--text-muted)" }}>Identify canal breach points and survey ground flow rates.</p>
-                </div>
-                <div className="p-2.5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
-                  <p className="font-bold mb-0.5" style={{ color: "var(--text)" }}>Phase 2: IoT Sensor Deployment</p>
-                  <p style={{ color: "var(--text-muted)" }}>Install smart water level and telemetry sensors along canal route.</p>
-                </div>
-                <div className="p-2.5 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
-                  <p className="font-bold mb-0.5" style={{ color: "var(--text)" }}>Phase 3: Civil Restoration</p>
-                  <p style={{ color: "var(--text-muted)" }}>Canal lining reinforcement with local administration support.</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          <div className="space-y-4">
-            <Card className="p-5">
-              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Industry Partner</h3>
-              <div className="p-3.5 rounded-xl" style={{ background: "var(--success-bg)", border: "1px solid var(--green)" }}>
-                <p className="text-xs font-bold mb-1 flex items-center gap-1" style={{ color: "var(--green)" }}>
-                  <Factory size={13} /> AquaSense IoT Solutions
-                </p>
-                <p className="text-xs mb-3" style={{ color: "var(--text)" }}>IoT hardware + field testing support</p>
-                <Btn variant="secondary" className="text-xs w-full">Invite Partner</Btn>
-              </div>
-            </Card>
-            <Card className="p-5">
-              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Project Summary</h3>
-              {[["Lead Institution", "BIT Mesra"], ["Industry Partner", "AquaSense IoT (Pending)"], ["Estimated Timeline", "6 Months"], ["Skills Covered", "4/4"]].map(([k, v]) => (
-                <div key={k} className="flex justify-between text-sm py-1.5 border-b last:border-0"
-                  style={{ borderColor: "var(--border)" }}>
-                  <span style={{ color: "var(--text-muted)" }}>{k}</span>
-                  <span className="font-bold" style={{ color: k === "Skills Covered" ? "var(--success)" : "var(--text)" }}>{v}</span>
-                </div>
-              ))}
-            </Card>
-            <Btn onClick={() => onNav("proposal")} className="w-full py-4 text-base" icon={<ArrowRight size={18} />}>
-              Write Proposal
-            </Btn>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProposalScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  return (
-    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
-      <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-        <button onClick={() => onNav("team-formation")} className="text-xs flex items-center gap-1 mb-4"
-          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
-        <h1 className="text-xl font-black flex items-center gap-2 mb-1" style={{ color: "var(--navy)" }}>
-          <FileText size={22} /> Project Proposal
-        </h1>
-        <p className="text-xs mb-6" style={{ color: "var(--text-muted)" }}>JH-WTR-1024 — Village Irrigation Canal Leakage</p>
-        <Card className="p-6 space-y-5">
-          {[
-            { label: "Problem Understanding", val: "The irrigation canal serving 500+ farmers has 40% water loss due to multiple breach points over 3 months." },
-            { label: "Proposed Solution", val: "Smart IoT-based leak detection system combined with canal lining reinforcement. Sensors monitor flow rate at key points." },
-            { label: "Technology Approach", val: "IoT flow sensors (Arduino + LoRa), cloud dashboard (MQTT/Node.js), GIS mapping, cement canal lining restoration." },
-            { label: "Expected Impact", val: "500 farmers, 18 villages, 40% → <10% water loss, ₹8L estimated annual crop savings." },
-          ].map(f => (
-            <div key={f.label}>
-              <label className="block text-sm font-bold mb-1" style={{ color: "var(--text)" }}>{f.label}</label>
-              <textarea rows={3} defaultValue={f.val}
-                className="w-full px-4 py-3 rounded-xl border text-sm outline-none resize-none"
-                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-            </div>
-          ))}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold mb-1" style={{ color: "var(--text)" }}>Estimated Cost (₹)</label>
-              <input defaultValue="4,50,000"
-                className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none"
-                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-            </div>
-            <div>
-              <label className="block text-sm font-bold mb-1" style={{ color: "var(--text)" }}>Timeline</label>
-              <input defaultValue="3 months (Sep–Nov 2026)"
-                className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none"
-                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-            </div>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <Btn onClick={() => onNav("project-lifecycle")} className="flex-1" icon={<SendHorizontal size={16} />}>
-              {t("btn.submit")} Proposal
-            </Btn>
-            <Btn variant="ghost" className="px-4" icon={<BookOpen size={16} />}>{t("btn.save")}</Btn>
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// ─── PROJECT LIFECYCLE ────────────────────────────────────────────────────────
-function ProjectLifecycleScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, report, setReport } = useApp();
-  const milestones = [
-    { label: "Research & Survey", date: "Sep 1–7", done: true },
-    { label: "Prototype Design", date: "Sep 8–15", done: true },
-    { label: "Testing & Validation", date: "Sep 16–30", active: true, behind: true },
-    { label: "Pilot Implementation", date: "Oct 1–20", pending: true },
-    { label: "Full Deployment", date: "Nov 1–15", pending: true },
-  ];
-  return (
-    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
-      {report?.impactReport && <ImpactReportModal isOpen={!!report.impactReport} onClose={() => setReport(curr => ({...curr, impactReport: null}))} reportData={report.impactReport} />}
-      <NavBar role="university" screen="project-lifecycle" onNav={onNav} />
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        <Card className="p-5">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h1 className="text-lg font-black" style={{ color: "var(--navy)" }}>{report?.description || "Project Implementation"}</h1>
-              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                {report?.problemCode || "Unknown Code"} • {report?.district || "Unknown District"}
-              </p>
-            </div>
-            <div className="text-right">
-              <StatusBadge status="on-track" />
-              <button onClick={() => onNav("project-health")}
-                className="text-xs font-semibold mt-2 block hover:underline transition-all"
-                style={{ color: "var(--navy)" }}>
-                {t("proj.view_progress")} →
+          
+          <div className="px-4 py-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-sm" style={{ color: "var(--text)" }}>{problems.length} problems nearby</h2>
+              <button className="p-2 rounded-lg" style={{ background: "var(--input-bg)", color: "var(--text-muted)" }}>
+                <Filter size={16} />
               </button>
             </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
-            {[["Progress", "68%"], ["Health Score", "82%"], ["Days Remaining", "47"], ["Phases", "5"]].map(([l, v]) => (
-              <div key={l} className="p-3 rounded-xl text-center" style={{ background: "var(--bg)" }}>
-                <div className="text-xl font-black" style={{ color: "var(--navy)" }}>{v}</div>
-                <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{l}</div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4">
-            <div className="flex justify-between text-xs mb-1">
-              <span style={{ color: "var(--text-muted)" }}>{t("proj.progress")}</span>
-              <span className="font-bold" style={{ color: "var(--green)" }}>68%</span>
-            </div>
-            <div className="h-3 rounded-full" style={{ background: "var(--border)" }}>
-              <div className="h-3 rounded-full" style={{ width: "68%", background: "var(--green)" }} />
-            </div>
-          </div>
-        </Card>
-
-        {/* Milestone status note without extension button */}
-        <div className="p-4 rounded-xl border flex items-start gap-3"
-          style={{ background: "var(--warning-bg)", borderColor: "var(--warning)" }}>
-          <AlertTriangle size={20} color="var(--warning)" className="flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold" style={{ color: "var(--warning)" }}>Testing milestone is behind schedule.</p>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text)" }}>
-              Testing phase is 4 days behind. May affect Pilot Implementation deadline.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="p-5 lg:col-span-2">
-            <h3 className="font-bold text-sm mb-4" style={{ color: "var(--text)" }}>Milestones</h3>
+            
+            {locationError && <p className="text-xs text-center text-red-500 mb-4">{locationError}</p>}
+            
             <div className="space-y-3">
-              {milestones.map((m, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{
-                      background: m.done ? "var(--success)" : m.active ? (m.behind ? "var(--warning-bg)" : "var(--amber)") : "var(--border)",
-                      color: m.done ? "white" : m.active ? (m.behind ? "var(--warning)" : "var(--navy)") : "var(--text-muted)"
-                    }}>
-                    {m.done ? <CheckCircle size={16} /> : m.active ? <Activity size={14} /> : <Clock size={14} />}
+              {problems.map((p, i) => (
+                <Card key={i} className="p-4 cursor-pointer card-hover" onClick={() => { setSelectedTrackingId(p.id || p.problem_code); onNav("tracking"); }}>
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-semibold text-sm flex-1 pr-4 line-clamp-1" style={{ color: "var(--text)" }}>{p.description || p.title}</h3>
+                    <StatusBadge status={p.status === "SOLVED" ? "resolved" : (p.status === "IN_PROGRESS" ? "in-progress" : "under-review")} />
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold"
-                      style={{ color: m.done ? "var(--text)" : m.active ? (m.behind ? "var(--warning)" : "var(--navy)") : "var(--text-muted)" }}>
-                      {m.label}
-                      {m.behind && <span className="ml-2 text-xs" style={{ color: "var(--warning)" }}>Behind schedule</span>}
-                    </p>
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>{m.date}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <div className="space-y-4">
-            <Card className="p-5">
-              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Project Actions</h3>
-              <div className="space-y-3">
-                <Btn className="w-full" variant="success" icon={<CheckCircle size={16} />}
-                     onClick={async () => {
-                       try {
-                         const { markSolved } = await import("./api");
-                         const res = await markSolved(report?.problemCode || "JH-WTR-1024");
-                         if (res && res.report) {
-                           setReport(curr => ({ ...curr, impactReport: res.report }));
-                           alert("Solved! " + res.message);
-                         }
-                       } catch(e) {
-                         alert("Error marking as solved: " + e);
-                       }
-                     }}>
-                  Mark as Solved
-                </Btn>
-                <Btn className="w-full" icon={<Activity size={16} />}>{t("proj.update")}</Btn>
-                <Btn variant="secondary" className="w-full" onClick={() => onNav("project-health")} icon={<TrendingUp size={16} />}>
-                  {t("proj.view_progress")}
-                </Btn>
-              </div>
-            </Card>
-            <Card className="p-5">
-              <h3 className="font-bold text-sm mb-2" style={{ color: "var(--text)" }}>Implementation Roadmap</h3>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                3 of 5 phases active. Expected completion: Nov 15, 2026.
-              </p>
-            </Card>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── PROJECT HEALTH / PROGRESS ────────────────────────────────────────────────
-function ProjectHealthScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  const factors = [
-    { label: "Milestone Progress", score: 75, icon: <Clock size={16} /> },
-    { label: "Deliverables / Completion Status", score: 90, icon: <FileText size={16} /> },
-    { label: "Mentor Engagement", score: 88, icon: <User size={16} /> },
-    { label: "Testing Progress", score: 55, icon: <Activity size={16} /> },
-    { label: "Timeline / Schedule Progress", score: 70, icon: <TrendingUp size={16} /> },
-    { label: "Quality & Standards Compliance", score: 80, icon: <CheckCircle size={16} /> },
-  ];
-  return (
-    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
-      <NavBar role="university" screen="project-lifecycle" onNav={onNav} />
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
-        <button onClick={() => onNav("project-lifecycle")} className="text-xs flex items-center gap-1 mb-4 transition-all"
-          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
-        <h1 className="text-xl font-black flex items-center gap-2 mb-6" style={{ color: "var(--navy)" }}>
-          <TrendingUp size={22} /> {t("proj.progress_analysis")}
-        </h1>
-        <Card className="p-6 mb-5 text-center">
-          <ProgressRing value={82} size={120} stroke={10} />
-          <h2 className="text-2xl font-black mt-4" style={{ color: "var(--success)" }}>82% ON TRACK</h2>
-          <StatusBadge status="on-track" />
-          <p className="text-sm mt-3 max-w-md mx-auto" style={{ color: "var(--text-muted)" }}>
-            Project milestones and technical deliverables are progressing according to the active implementation roadmap.
-          </p>
-        </Card>
-        <Card className="p-5 mb-5">
-          <h3 className="font-bold text-sm mb-4" style={{ color: "var(--text)" }}>Progress Factors Breakdown</h3>
-          <div className="space-y-3">
-            {factors.map(f => (
-              <div key={f.label} className="flex items-center gap-3">
-                <span style={{ color: "var(--text-muted)", width: 18 }}>{f.icon}</span>
-                <div className="flex-1">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-medium" style={{ color: "var(--text)" }}>{f.label}</span>
-                    <span className="font-bold" style={{
-                      color: f.score >= 80 ? "var(--success)" : f.score >= 60 ? "var(--warning)" : "var(--error)"
-                    }}>{f.score}%</span>
-                  </div>
-                  <div className="h-2 rounded-full" style={{ background: "var(--border)" }}>
-                    <div className="h-2 rounded-full" style={{
-                      width: `${f.score}%`,
-                      background: f.score >= 80 ? "var(--success)" : f.score >= 60 ? "var(--warning)" : "var(--error)"
-                    }} />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, setReport } = useApp();
-  const profile = useProfileDisplay("industry");
-  const [problems, setProblems] = useState<any[]>([]);
-  const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
-  const [myProjects, setMyProjects] = useState<any[]>([]);
-
-  useEffect(() => {
-    import("./firebase/config").then(({ auth }) => {
-      const unsubscribe = auth.onAuthStateChanged((user) => {
-        if (user) {
-          getRecommendedProblems().then(data => {
-            setProblems(data.problems || []);
-          }).catch(console.error);
-          getMyProblems().then(data => {
-            setMyProjects(data.problems || []);
-          }).catch(console.error);
-        }
-      });
-      return () => unsubscribe();
-    });
-  }, []);
-
-  if (selectedFilter) {
-    let fp = problems;
-    if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS");
-    if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
-    return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
-  }
-
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <NavBar role="industry" screen="industry-dashboard" onNav={onNav} />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
-              <Factory size={22} /> {t("ind.dashboard")}
-            </h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{profile.name || "Industry Partner"}{profile.detail ? " - " + profile.detail : ""}</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          {[
-            { icon: <Bell size={18} />, label: "Recommended Projects", value: problems.length.toString(), color: "var(--amber)" },
-            { icon: <Users size={18} />, label: "Active Partnerships", value: myProjects.filter((p: any) => p.status === 'IN_PROGRESS' || p.status === 'ASSIGNED').length.toString(), color: "var(--green)" },
-            { icon: <GraduationCap size={18} />, label: "Mentorship", value: myProjects.length.toString(), color: "var(--navy)" },
-            { icon: <TrendingUp size={18} />, label: "CSR Funding (L)", value: "0", color: "#7C3AED" },
-          ].map(k => <KPICard key={k.label} {...k} />)}
-        </div>
-
-        <h2 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "var(--text)" }}>
-          <Lightbulb size={16} /> Recommended Projects
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {problems.map((p, i) => (
-            <Card key={i} className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{p.description || p.title || "Citizen Report"}</h3>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{p.category_name} � {p.district}</p>
-                </div>
-                <div className="text-right">
-                  <div className="font-black text-2xl" style={{ color: "var(--success)" }}>{p.priority_score || 85}%</div>
-                  <div className="text-xs" style={{ color: "var(--text-muted)" }}>Match</div>
-                </div>
-              </div>
-              <div className="mb-3 space-y-1">
-                  <p className="text-xs flex items-center gap-1.5" style={{ color: "var(--success)" }}>
-                    <CheckCircle size={11} /> High Priority Issue
-                  </p>
-                  <p className="text-xs flex items-center gap-1.5" style={{ color: "var(--success)" }}>
-                    <CheckCircle size={11} /> {p.category_name} domain
-                  </p>
-              </div>
-              <div className="flex gap-2 mt-4 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
-                <Btn variant="secondary" className="flex-1" icon={<Eye size={16} />} onClick={() => {
-                  setReport(curr => ({
-                    ...curr,
-                    problemCode: p.problem_code,
-                    status: p.status,
-                    description: p.description,
-                    category: p.category_name,
-                    district: p.district,
-                    block: p.block,
-                    panchayat: p.panchayat_ward,
-                    village: p.village,
-                    aiData: { category: p.category_name, priorityScore: p.priority_score }
-                  }));
-                  onNav("industry-project-detail");
-                }}>
-                  View
-                </Btn>
-                <Btn className="flex-1" icon={<Users size={16} />} onClick={async () => {
-                   await acceptProblem(p.problem_code);
-                   alert("You have collaborated on this project. The status is now IN PROGRESS!");
-                   getRecommendedProblems().then(data => setProblems(data.problems || []));
-                }}>
-                  Collaborate
-                </Btn>
-              </div>
-            </Card>
-          ))}
-          {problems.length === 0 && (
-            <p className="text-xs col-span-2 text-center py-5" style={{ color: "var(--text-muted)" }}>No recommended projects found right now.</p>
-          )}
-        </div>
-      
-          <h2 className="font-bold text-sm mb-3 mt-8" style={{ color: "var(--text)" }}>My Active Projects</h2>
-          {myProjects.length === 0 ? (
-            <p className="text-sm text-center py-4" style={{ color: "var(--text-muted)" }}>No active projects found.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {myProjects.map((c, i) => (
-                <Card key={i} className="p-5">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.description || c.title}</h3>
-                      <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                        <MapPin size={11} /> {c.district || "Location"}
-                      </p>
-                    </div>
-                    <StatusBadge status={c.initiative_status || c.status} />
-                  </div>
-                  <div className="mt-4 flex gap-2">
-                    <Btn variant="primary" className="text-xs flex-1" onClick={() => {
-                        setReport(curr => ({ ...curr, problemCode: c.problem_code, description: c.description }));
-                        onNav("solver-dashboard");
-                    }}>View Details</Btn>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1 font-medium" style={{ color: "var(--navy)" }}>
+                      <MapPin size={12} /> {Math.round(p.distance / 100) / 10 || "0.5"} km
+                    </span>
+                    <span style={{ color: "var(--text-muted)" }}>{p.category || p.category_name}</span>
                   </div>
                 </Card>
               ))}
             </div>
-          )}
-</div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-
-
-
-function ImpactReportModal({ isOpen, onClose, reportData }: { isOpen: boolean; onClose: () => void; reportData: any }) {
-  if (!isOpen || !reportData) return null;
-
-  const metrics = (() => {
-    try {
-       return typeof reportData.key_metrics === 'string' ? JSON.parse(reportData.key_metrics) : reportData.key_metrics;
-    } catch(e) { return []; }
-  })();
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center gap-2 mb-4 text-green-700">
-           <CheckCircle size={24} />
-           <h2 className="text-xl font-bold">Problem Solved Successfully</h2>
-        </div>
-        <h3 className="text-lg font-bold mb-2" style={{ color: "var(--navy)" }}>{reportData.title}</h3>
-        <p className="text-sm mb-4" style={{ color: "var(--text)" }}>{reportData.summary}</p>
-        
-        <h4 className="font-bold text-sm mb-2" style={{ color: "var(--text-muted)" }}>Key Metrics & Impact</h4>
-        <ul className="list-disc pl-5 mb-4 text-sm space-y-1">
-           {metrics && metrics.map((m:string, i:number) => <li key={i}>{m}</li>)}
-        </ul>
-
-        <h4 className="font-bold text-sm mb-2" style={{ color: "var(--text-muted)" }}>Challenges Overcome</h4>
-        <p className="text-sm mb-6 bg-gray-50 p-3 rounded-lg border">{reportData.challenges_overcome}</p>
-
-        <Btn onClick={onClose} className="w-full">Done</Btn>
-      </Card>
-    </div>
-  );
-}
-
-function SolutionModal({ isOpen, onClose, problemCode }: { isOpen: boolean; onClose: () => void; problemCode: string }) {
-  const [text, setText] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-lg p-5 flex flex-col max-h-[90vh]">
-        <h2 className="text-xl font-bold mb-3" style={{ color: "var(--navy)" }}>Submit AI Solution</h2>
-        {!result ? (
-          <>
-            <p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
-              Describe your proposed solution, timeline, and resources needed. Our AI will automatically structure this into a formal proposal and assign the project.
-            </p>
-            <textarea 
-              value={text} 
-              onChange={e => setText(e.target.value)}
-              className="w-full p-3 rounded-xl border flex-1 min-h-[150px] mb-4 text-sm"
-              style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}
-              placeholder="E.g. We will implement an IoT based sensor network over 6 months using  budget..."
-            />
-            <div className="flex gap-2 justify-end">
-              <Btn variant="secondary" onClick={onClose}>Cancel</Btn>
-              <Btn onClick={async () => {
-                if(!text) return;
-                setLoading(true);
-                try {
-                  const res = await submitSolutionAI(problemCode, text);
-                  setResult(res.initiative);
-                } catch(e:any) {
-                  alert("Error: " + e.message);
-                } finally {
-                  setLoading(false);
-                }
-              }}>
-                {loading ? "Processing via AI..." : "Submit Proposal"}
-              </Btn>
-            </div>
-          </>
-        ) : (
-          <div className="space-y-4 overflow-y-auto">
-            <div className="p-4 rounded-xl bg-green-50 border border-green-200">
-              <h3 className="font-bold text-green-800 text-lg mb-1">Solution Structured Successfully!</h3>
-              <p className="text-green-700 text-sm">Status updated to IN_PROGRESS.</p>
-            </div>
-            
-            <div><label className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>AI Generated Title</label>
-            <p className="text-sm font-semibold">{result.initiative_title}</p></div>
-            
-            <div><label className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>Extracted Timeline</label>
-            <p className="text-sm">{result.timeline_display || "Not specified"}</p></div>
-            
-            <div><label className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>Resources Needed</label>
-            <p className="text-sm">{result.expected_impact || "Not specified"}</p></div>
-            
-            <div><label className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>Feasibility Score</label>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden"><div className="h-full bg-amber-500" style={{ width: `${result.feasibility_score}%` }}></div></div>
-              <span className="text-sm font-bold">{result.feasibility_score}/100</span>
-            </div></div>
-
-            <Btn onClick={onClose} className="w-full mt-4">Close & Return</Btn>
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function IndustryProjectDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t, report } = useApp();
-  const [showSolutionModal, setShowSolutionModal] = useState(false);
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <SolutionModal isOpen={showSolutionModal} onClose={() => setShowSolutionModal(false)} problemCode={report.problemCode} />
-      <NavBar role="industry" screen="industry-dashboard" onNav={onNav} />
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
-        <button onClick={() => onNav("industry-dashboard")} className="text-xs flex items-center gap-1 mb-4"
-          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
-        <h1 className="text-xl font-black mb-1" style={{ color: "var(--navy)" }}>Smart Irrigation Monitoring System</h1>
-        <p className="text-xs mb-6" style={{ color: "var(--text-muted)" }}>JH-WTR-1024 • BIT Mesra × Ranchi District</p>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2 space-y-4">
-            {[
-              { t: "Problem", c: "40% water leakage in irrigation canal serving 500 farmers across 6 villages." },
-              { t: "Solution", c: "IoT-based real-time leak detection with flow sensors + canal lining restoration." },
-              { t: "Technology", c: "IoT sensors (Arduino/ESP32 + LoRa), cloud dashboard, GIS mapping, civil restoration." },
-              { t: "Expected Impact", c: "500 farmers, 40% → <10% water loss, ₹8L/year savings, replicable across 200+ canals." },
-            ].map(s => (
-              <Card key={s.t} className="p-4">
-                <h3 className="font-bold text-sm mb-2" style={{ color: "var(--text)" }}>{s.t}</h3>
-                <p className="text-sm" style={{ color: "var(--text)" }}>{s.c}</p>
-              </Card>
-            ))}
-          </div>
-          <div className="space-y-4">
-            <Card className="p-4 text-center">
-              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Industry Match</h3>
-              <ProgressRing value={89} size={80} color="var(--green)" />
-              <div className="mt-3 space-y-2 text-xs text-left">
-                {[["Domain Fit", "IoT + Agriculture"], ["Support Type", "Hardware + Tech"], ["Health", "82% ON TRACK"]].map(([k, v]) => (
-                  <div key={k} className="flex justify-between">
-                    <span style={{ color: "var(--text-muted)" }}>{k}</span>
-                    <span className="font-bold" style={{ color: "var(--text)" }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-            <Btn onClick={() => setShowSolutionModal(true)} className="w-full" icon={<Users size={16} />}>
-              Submit AI Solution
-            </Btn>
-            <Btn variant="secondary" className="w-full" icon={<TrendingUp size={16} />}>{t("ind.funding")}</Btn>
-            <Btn variant="ghost" className="w-full" icon={<Briefcase size={16} />}>Co-Develop</Btn>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── PARTNERSHIP FORM ────────────────────────────────────────────────────────
-function PartnershipFormScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  const [supports, setSupports] = useState<string[]>(["Mentorship", "Hardware"]);
-  const toggleSupport = (s: string) =>
-    setSupports(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
-  return (
-    <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
-      <NavBar role="industry" screen="partnership-form" onNav={onNav} />
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
-        <button onClick={() => onNav("industry-project-detail")} className="text-xs flex items-center gap-1 mb-4"
-          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back</button>
-        <h1 className="text-xl font-black flex items-center gap-2 mb-6" style={{ color: "var(--navy)" }}>
-          <Users size={22} /> Partnership Offer
-        </h1>
-        <Card className="p-6 space-y-5">
-          {[
-            { label: "Organisation Name", val: "TechGrow Solutions Pvt. Ltd." },
-            { label: "Contact Person", val: "Sanjay Mehta, CTO" },
-            { label: "Email", val: "sanjay@techgrow.in" },
-            { label: "Expertise Area", val: "IoT Hardware, Embedded Systems, Agriculture Tech" },
-          ].map(f => (
-            <div key={f.label}>
-              <label className="block text-sm font-bold mb-1" style={{ color: "var(--text)" }}>{f.label}</label>
-              <input defaultValue={f.val}
-                className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none"
-                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-            </div>
-          ))}
-          <div>
-            <label className="block text-sm font-bold mb-2" style={{ color: "var(--text)" }}>Support Type</label>
-            <div className="grid grid-cols-2 gap-2">
-              {["Mentorship", "Funding", "Hardware", "Infrastructure", "Field Testing", "Co-development", "Technology Transfer", "Training"].map(s => (
-                <button key={s} onClick={() => toggleSupport(s)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm border-2 text-left transition-all"
-                  style={{
-                    borderColor: supports.includes(s) ? "var(--green)" : "var(--border)",
-                    background: supports.includes(s) ? "var(--success-bg)" : "var(--card)",
-                    color: "var(--text)"
-                  }}>
-                  {supports.includes(s) ? <CheckCircle size={14} color="var(--green)" /> : <div className="w-3.5 h-3.5 rounded-full border" style={{ borderColor: "var(--border)" }} />}
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold mb-1" style={{ color: "var(--text)" }}>Budget (₹)</label>
-              <input defaultValue="1,50,000"
-                className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none"
-                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-            </div>
-            <div>
-              <label className="block text-sm font-bold mb-1" style={{ color: "var(--text)" }}>Mentor Availability</label>
-              <input defaultValue="10 hrs/week"
-                className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none"
-                style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-            </div>
-          </div>
-          <Btn onClick={() => onNav("partnership-success")} className="w-full py-4 text-base"
-            icon={<SendHorizontal size={18} />}>
-            {t("ind.partner")}
-          </Btn>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// ─── PARTNERSHIP SUCCESS ──────────────────────────────────────────────────────
-function PartnershipSuccessScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center"
-      style={{ background: "var(--bg)" }}>
-      <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
-        style={{ background: "var(--success-bg)" }}>
-        <Users size={40} color="var(--success)" />
-      </div>
-      <h1 className="text-xl font-black mb-2" style={{ color: "var(--success)" }}>Partnership Offer Submitted!</h1>
-      <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
-        TechGrow Solutions' offer has been sent to BIT Mesra. They will confirm within 3 working days.
-      </p>
-      <div className="flex gap-3">
-        <Btn onClick={() => onNav("industry-dashboard")}>Back to Dashboard</Btn>
-        <Btn variant="secondary" onClick={() => onNav("project-lifecycle")}>View Project</Btn>
-      </div>
-    </div>
-  );
-}
-
-// ─── SOLUTION REPOSITORY ──────────────────────────────────────────────────────
-function SolutionRepoScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  const [search, setSearch] = useState("");
-  const solutions = [
-    { title: "IoT-Based Irrigation Monitoring", cat: "Water / Agriculture", loc: "Kanke, Ranchi", uni: "BIT Mesra", beneficiaries: "2,500 farmers", status: "deployed" as const },
-    { title: "Mobile Health Diagnostic App", cat: "Healthcare", loc: "Dhanbad", uni: "AIIMS Deoghar", beneficiaries: "8,000 residents", status: "deployed" as const },
-    { title: "Solar Water Pump Controller", cat: "Water / Energy", loc: "Bokaro", uni: "NIT Jamshedpur", beneficiaries: "1,200 farmers", status: "deployed" as const },
-    { title: "Community Waste Segregation", cat: "Sanitation", loc: "Ranchi Urban", uni: "BIT Mesra", beneficiaries: "15,000 residents", status: "in-progress" as const },
-  ];
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <NavBar role="citizen" screen="solution-repo" onNav={onNav} />
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <h1 className="text-xl font-black flex items-center gap-2 mb-1" style={{ color: "var(--navy)" }}>
-          <BookOpen size={22} /> {t("repo.title")}
-        </h1>
-        <p className="text-xs mb-5" style={{ color: "var(--text-muted)" }}>
-          Knowledge bank of deployed and reusable solutions for Jharkhand
-        </p>
-        <div className="flex gap-3 mb-5">
-          <div className="flex-1 relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder={t("repo.search")}
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm outline-none"
-              style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-          </div>
-          <Btn variant="ghost" className="text-xs" icon={<Filter size={14} />}>Filter</Btn>
-        </div>
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-          {["All", "Water", "Agriculture", "Healthcare", "Education", "Energy", "Sanitation"].map(f => (
-            <button key={f}
-              className="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-all"
-              style={{
-                background: f === "All" ? "var(--navy)" : "var(--card)",
-                color: f === "All" ? "white" : "var(--text-muted)",
-                borderColor: "var(--border)"
-              }}>{f}</button>
-          ))}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {solutions.map((s, i) => (
-            <Card key={i} className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{s.title}</h3>
-                  <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                    <MapPin size={11} /> {s.loc} • <GraduationCap size={11} /> {s.uni}
-                  </p>
-                </div>
-                <StatusBadge status={s.status} />
-              </div>
-              <div className="flex gap-2 mb-3 flex-wrap">
-                <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{s.cat}</span>
-                <span className="text-xs px-2 py-0.5 rounded-lg font-semibold"
-                  style={{ background: "var(--success-bg)", color: "var(--success)" }}>
-                  <Users size={10} className="inline mr-0.5" />{s.beneficiaries}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <Btn variant="secondary" onClick={() => onNav("solution-detail")} className="flex-1 text-xs"
-                  icon={<Eye size={13} />}>{t("repo.view")}</Btn>
-                <Btn onClick={() => onNav("solution-detail")} className="flex-1 text-xs"
-                  icon={<RefreshCw size={13} />}>{t("repo.reuse")}</Btn>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── SOLUTION DETAIL ──────────────────────────────────────────────────────────
-function SolutionDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <NavBar role="citizen" screen="solution-repo" onNav={onNav} />
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
-        <button onClick={() => onNav("solution-repo")} className="text-xs flex items-center gap-1 mb-4"
-          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> {t("repo.title")}</button>
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-black" style={{ color: "var(--navy)" }}>IoT-Based Irrigation Monitoring</h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>BIT Mesra × AquaSense IoT × Ranchi District</p>
-          </div>
-          <StatusBadge status="deployed" />
-        </div>
-
-        <div className="p-4 rounded-xl border mb-6 flex items-center gap-3"
-          style={{ background: "#EDE9FE", borderColor: "#C4B5FD" }}>
-          <RefreshCw size={20} color="#5B21B6" />
-          <div>
-            <p className="text-sm font-bold" style={{ color: "#5B21B6" }}>
-              This solution may be reusable for 4 similar challenges.
-            </p>
-            <p className="text-xs" style={{ color: "#6D28D9" }}>
-              Similar water problems found in Bokaro (2), Giridih (1), Hazaribagh (1).
-            </p>
-          </div>
-          <Btn className="ml-auto text-xs flex-shrink-0" onClick={() => onNav("tracking")}
-            icon={<ArrowRight size={13} />}>
-            View Status
-          </Btn>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2 space-y-4">
-            {[
-              { t: "Problem Solved", c: "40% water leakage in main irrigation canal serving 500+ farmers. Persistent for 3 months." },
-              { t: "Solution Implemented", c: "IoT flow sensors at 12 strategic points. Cloud dashboard with real-time monitoring. Canal lining restored at 6 breach points." },
-              { t: "Technology Used", c: "Arduino Uno + LoRa sensors, MQTT cloud protocol, Node.js dashboard, GPS mapping, Portland cement canal lining." },
-              { t: "Deployment Guide", c: "Install sensors at canal entry/exit points. Configure LoRa network. Train local Panchayat maintenance team (4-hour training). Dashboard via mobile app." },
-            ].map(s => (
-              <Card key={s.t} className="p-4">
-                <h3 className="font-bold text-sm mb-2" style={{ color: "var(--text)" }}>{s.t}</h3>
-                <p className="text-sm" style={{ color: "var(--text)" }}>{s.c}</p>
-              </Card>
-            ))}
-          </div>
-          <div className="space-y-4">
-            <Card className="p-4">
-              <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Impact Summary</h3>
-              {[
-                { l: "Farmers Benefited", v: "2,500" },
-                { l: "Villages Covered", v: "18" },
-                { l: "Water Loss Before", v: "40%" },
-                { l: "Water Loss After", v: "8%" },
-                { l: "Est. Annual Savings", v: "₹8L/year" },
-                { l: "Implementation Cost", v: "₹4.5L" },
-              ].map(item => (
-                <div key={item.l} className="flex justify-between text-sm py-1.5 border-b last:border-0"
-                  style={{ borderColor: "var(--border)" }}>
-                  <span style={{ color: "var(--text-muted)" }}>{item.l}</span>
-                  <span className="font-bold" style={{ color: "var(--text)" }}>{item.v}</span>
-                </div>
-              ))}
-            </Card>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── IMPACT DASHBOARD ─────────────────────────────────────────────────────────
-function ImpactDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
-  const [stats, setStats] = useState({ reported: 0, deployed: 0, benefited: 0, savings: 0, villages: 0, solutions: 0 });
-  useEffect(() => {
-    import('./api').then(({ getStats }) => {
-      getStats().then(data => {
-        if (data && data.success) {
-          setStats(data);
-        }
-      }).catch(console.error);
-    });
-  }, []);
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <NavBar role="citizen" screen="impact-dashboard" onNav={onNav} />
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
-            <TrendingUp size={22} /> Impact Dashboard
-          </h1>
-          <span className="text-xs px-2 py-1 rounded-lg" style={{ background: "var(--success-bg)", color: "var(--success)" }}>Live Data</span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          {[
-            { icon: <Users size={18} />, label: t("impact.people"), value: stats.benefited.toLocaleString(), color: "var(--green)" },
-            { icon: <Map size={18} />, label: t("impact.villages"), value: stats.villages.toLocaleString(), color: "var(--navy)" },
-            { icon: <Lightbulb size={18} />, label: t("impact.solutions"), value: stats.solutions.toLocaleString(), color: "#7C3AED" },
-            { icon: <TrendingUp size={18} />, label: t("impact.savings") + " (₹)", value: stats.savings.toLocaleString(), color: "#B45309" },
-          ].map(k => <KPICard key={k.label} {...k} />)}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <Card className="p-5">
-            <h3 className="font-bold text-sm mb-4" style={{ color: "var(--text)" }}>Before vs. After — Water</h3>
-            <div className="space-y-4">
-              <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>No before/after data yet.</p>
-            </div>
-          </Card>
-
-          <Card className="p-5">
-            <h3 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "var(--text)" }}>
-              <Star size={15} /> Citizen Feedback
-            </h3>
-            <div className="space-y-3">
-              <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>No feedback data yet.</p>
-            </div>
-          </Card>
-
-          <Card className="p-5">
-            <h3 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "var(--text)" }}>
-              <Leaf size={15} color="var(--green)" /> Environmental Impact
-            </h3>
-            <div className="space-y-3">
-              <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>Environmental aggregation pending.</p>
-            </div>
-          </Card>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
-
-// ─── PROFILE SCREEN (Shifted from Profile Setup to Dashboard Bottom Right) ────
-function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: string }) {
-  const { t, lang } = useApp();
-  const [isEditing, setIsEditing] = useState(false);
-  const [showSavedToast, setShowSavedToast] = useState(false);
-  const [saveError, setSaveError] = useState("");
-
-  // Role-specific initial state
-  const [citizenData, setCitizenData] = useState({
-    name: "", gender: "", dob: "", phone: "", houseNumber: "",
-    landmark: "", city: "", pincode: "", district: "", state: "",
-  });
-
-  const [panchayatData, setPanchayatData] = useState({
-    panchayatName: "", mukhiyaName: "", officeAddress: "", phone: "",
-    district: "", block: "", villages: "",
-  });
-
-  const [localOrgData, setLocalOrgData] = useState({
-    orgName: "", spocName: "", designation: "", officeAddress: "",
-    district: "", block: "", area: "", phone: "",
-  });
-
-  const [uniData, setUniData] = useState({
-    uniName: "", spocName: "", address: "", expertise: "", phone: "",
-  });
-
-  const [industryData, setIndustryData] = useState({
-    industryName: "", spocName: "", category: "", address: "",
-    expertise: "", email: "",
-  });
-
-  const [orgSolverData, setOrgSolverData] = useState({
-    orgName: "", spocName: "", focus: "", address: "", phone: "",
-  });
-
-  useEffect(() => {
-    let active = true;
-    getProfileMe().then(({ profile, user }) => {
-      if (!active || !profile) return;
-      if (role === "citizen") setCitizenData(v => ({ ...v, name: profile.name || "", gender: profile.gender || "", dob: profile.date_of_birth?.slice(0, 10) || "", phone: user?.phone_number || v.phone, houseNumber: profile.house_number || "", landmark: profile.landmark || "", city: profile.city_village || "", pincode: profile.pincode || "", district: profile.district || "" }));
-      else if (role === "panchayat") setPanchayatData({ panchayatName: profile.panchayat_name || "", mukhiyaName: profile.sarpanch_mukhiya_name || "", officeAddress: profile.office_address || "", phone: profile.official_phone || "", district: profile.district || "", block: profile.block || "", villages: profile.villages_covered || "" });
-      else if (role === "localorg" || role === "org-victim") setLocalOrgData({ orgName: profile.organization_name || "", spocName: profile.spoc_name || "", designation: profile.designation || "", officeAddress: profile.office_address || "", district: profile.district || "", block: profile.block || "", area: profile.panchayat_area || "", phone: profile.organization_contact || "" });
-      else if (role === "university") setUniData({ uniName: profile.university_name || "", spocName: profile.spoc_name || "", address: profile.institutional_address || "", expertise: profile.domain_expertise || "", phone: profile.spoc_number || "" });
-      else if (role === "industry") setIndustryData({ industryName: profile.industry_name || "", spocName: profile.spoc_name || "", category: profile.industry_type || "", address: profile.company_address || "", expertise: profile.domain_expertise || "", email: profile.official_email || user?.email || "" });
-      else if (role === "org-solver" || role === "org") setOrgSolverData({ orgName: profile.organization_name || "", spocName: profile.spoc_name || "", focus: profile.domain_expertise || profile.domain || "", address: profile.registered_address || "", phone: profile.spoc_contact || "" });
-    }).catch(() => {});
-    return () => { active = false; };
-  }, [role]);
-
-  const handleSave = async () => {
-    setSaveError("");
-    try {
-      if (role === "citizen") { if (!citizenData.gender || !citizenData.dob) { setSaveError("Gender and Date of Birth are mandatory."); return; } await saveCitizenProfile({ name: citizenData.name, phoneNumber: citizenData.phone, gender: citizenData.gender, dateOfBirth: citizenData.dob, houseNumber: citizenData.houseNumber, cityVillage: citizenData.city, pincode: citizenData.pincode, landmark: citizenData.landmark, district: citizenData.district, residentialAddress: `${citizenData.houseNumber}, ${citizenData.landmark}, ${citizenData.city}, ${citizenData.district}, ${citizenData.pincode}` }); }
-      else if (role === "panchayat") await savePanchayatProfile({ panchayatName: panchayatData.panchayatName, sarpanchName: panchayatData.mukhiyaName, district: panchayatData.district, block: panchayatData.block, villagesCovered: panchayatData.villages, officeAddress: panchayatData.officeAddress, officialPhone: panchayatData.phone });
-      else if (role === "localorg" || role === "org-victim") await saveLocalOrgProfile({ organizationName: localOrgData.orgName, spocName: localOrgData.spocName, designation: localOrgData.designation, district: localOrgData.district, block: localOrgData.block, panchayatArea: localOrgData.area, officeAddress: localOrgData.officeAddress, organizationContact: localOrgData.phone });
-      else if (role === "university") await saveUniProfile({ universityName: uniData.uniName, spocName: uniData.spocName, spocNumber: uniData.phone, institutionalAddress: uniData.address, domainExpertise: uniData.expertise });
-      else if (role === "industry") await saveIndustryProfile({ industryName: industryData.industryName, industryType: industryData.category, spocName: industryData.spocName, officialEmail: industryData.email, companyAddress: industryData.address, domainExpertise: industryData.expertise });
-      else await saveOrgProfile({ organizationName: orgSolverData.orgName, spocName: orgSolverData.spocName, spocContact: orgSolverData.phone, domainExpertise: orgSolverData.focus, registeredAddress: orgSolverData.address });
-      setIsEditing(false); setShowSavedToast(true); setTimeout(() => setShowSavedToast(false), 3500);
-    } catch (err: any) { setSaveError(err.message || "Could not save profile."); }
-  };
-
-  const getRoleHeader = () => {
-    if (role === "panchayat") {
-      return {
-        title: panchayatData.panchayatName,
-        sub: "Panchayati Raj Institution • Local Body",
-        icon: <Building2 size={24} color="var(--green)" />,
-        tag: "Verified Local Governance",
-      };
-    }
-    if (role === "localorg" || role === "org-victim") {
-      return {
-        title: localOrgData.orgName,
-        sub: "Local Organisation (RWA) • Community Body",
-        icon: <Users size={24} color="var(--green)" />,
-        tag: "Verified Resident Welfare Association",
-      };
-    }
-    if (role === "university") {
-      return {
-        title: uniData.uniName,
-        sub: "Higher Education & Research Institution",
-        icon: <GraduationCap size={24} color="var(--amber)" />,
-        tag: "Academic Partner",
-      };
-    }
-    if (role === "industry") {
-      return {
-        title: industryData.industryName,
-        sub: "Industry & Corporate Innovation Partner",
-        icon: <Briefcase size={24} color="var(--amber)" />,
-        tag: "Industry Solver",
-      };
-    }
-    if (role === "org-solver" || role === "org") {
-      return {
-        title: orgSolverData.orgName,
-        sub: "Civil Society & Non-Profit Organisation",
-        icon: <Building size={24} color="var(--amber)" />,
-        tag: "Solution Provider",
-      };
-    }
-    return {
-      title: citizenData.name,
-      sub: citizenData.phone + " • " + citizenData.city,
-      icon: <User size={24} color="var(--green)" />,
-      tag: "Verified Citizen (JH-CIT-8821)",
-    };
-  };
-
-  const headerInfo = getRoleHeader();
-
-  return (
-    <div className="min-h-screen pb-20" style={{ background: "var(--bg)" }}>
-      <NavBar role={role} screen="profile" onNav={onNav} />
-
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        {/* Back navigation */}
-        <button onClick={() => onNav(getHomeDashboard(role))}
-          className="text-xs flex items-center gap-1 mb-4 transition-all cursor-pointer"
-          style={{ color: "var(--text-muted)" }}>
-          <ArrowLeft size={13} /> Back to Dashboard
-        </button>
-
-        {/* Saved feedback banner */}
-        {showSavedToast && (
-          <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-500/30 flex items-center gap-2 text-emerald-800 dark:text-emerald-200 text-xs font-semibold animate-fadeIn">
-            <CheckCircle size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>{t("profile.saved")}</span>
-          </div>
-        )}
-        {saveError && <div className="mb-4 p-3 rounded-xl text-xs font-semibold" style={{ background: "var(--error-bg)", color: "var(--error)" }}>{saveError}</div>}
-
-        {/* Mitra Compact Guidance Banner (Image 2 style) - ONLY FOR INDIVIDUAL CITIZEN */}
-        {role === "citizen" && (
-          <div className="mb-5 p-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 shadow-sm">
-            <MitraAssistant
-              size="compact"
-              variant="compact"
-              message={t("mitra.profile.view")}
-              subMessage="Tap Edit Profile below to update your name, address or contact details."
-            />
-          </div>
-        )}
-
-        {/* Profile Card Header */}
-        <Card className="p-5 mb-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
-                style={{ background: "var(--success-bg)", border: "1.5px solid var(--border)" }}>
-                {headerInfo.icon}
-              </div>
-              <div>
-                <h1 className="text-lg font-black" style={{ color: "var(--text)" }}>{headerInfo.title}</h1>
-                <p className="text-xs font-medium mt-0.5" style={{ color: "var(--text-muted)" }}>{headerInfo.sub}</p>
-                <div className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#207244]/10 text-[#207244] dark:text-[#4ade80]">
-                  <UserCheck size={12} /> {headerInfo.tag}
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                if (isEditing) handleSave();
-                else setIsEditing(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
-              style={{
-                background: isEditing ? "var(--green)" : "var(--card)",
-                color: isEditing ? "white" : "var(--text)",
-                border: "1.5px solid var(--border)",
-              }}
-            >
-              {isEditing ? (
-                <><CheckCircle size={14} /> {t("profile.save")}</>
-              ) : (
-                <><Edit2 size={13} /> {t("profile.edit")}</>
-              )}
-            </button>
-          </div>
-        </Card>
-
-        {/* Profile Details Form Content */}
-        <Card className="p-5 shadow-sm mb-6">
-          <div className="flex items-center justify-between mb-4 pb-2 border-b" style={{ borderColor: "var(--border)" }}>
-            <h2 className="text-sm font-black flex items-center gap-1.5" style={{ color: "var(--text)" }}>
-              <UserCheck size={16} color="var(--green)" /> {t("profile.info")}
-            </h2>
-            <span className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
-              {isEditing ? "Editing Mode" : "View Mode"}
-            </span>
-          </div>
-
-          {/* CITIZEN PROFILE FIELDS */}
-          {role === "citizen" && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("profile.name")}</label>
-                  <input
-                    disabled={!isEditing}
-                    value={citizenData.name}
-                    onChange={e => setCitizenData({ ...citizenData, name: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none transition-all disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("auth.mobile")}</label>
-                  <input
-                    disabled={!isEditing}
-                    value={citizenData.phone}
-                    onChange={e => setCitizenData({ ...citizenData, phone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none transition-all disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("profile.gender")} <span style={{ color: "var(--error)" }}>*</span></label>
-                  <select
-                    disabled={!isEditing}
-                    value={citizenData.gender}
-                    onChange={e => setCitizenData({ ...citizenData, gender: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none transition-all disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}>
-                    <option>Male</option>
-                    <option>Female</option>
-                    <option>Other</option>
-                    <option>Prefer not to say</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>{t("profile.dob")} <span style={{ color: "var(--error)" }}>*</span></label>
-                  <input
-                    type="date"
-                    disabled={!isEditing}
-                    value={citizenData.dob}
-                    onChange={e => setCitizenData({ ...citizenData, dob: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none transition-all disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <p className="text-xs font-bold mb-2 flex items-center gap-1" style={{ color: "var(--text)" }}>
-                  <MapPin size={13} color="var(--green)" /> {t("profile.address")}
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2 border-l-2" style={{ borderColor: "var(--border)" }}>
-                  <div>
-                    <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>{t("profile.housenumber")}</label>
-                    <input
-                      disabled={!isEditing}
-                      value={citizenData.houseNumber}
-                      onChange={e => setCitizenData({ ...citizenData, houseNumber: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border text-xs outline-none disabled:opacity-75"
-                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>{t("profile.landmark")}</label>
-                    <input
-                      disabled={!isEditing}
-                      value={citizenData.landmark}
-                      onChange={e => setCitizenData({ ...citizenData, landmark: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border text-xs outline-none disabled:opacity-75"
-                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>{t("profile.city")}</label>
-                    <input
-                      disabled={!isEditing}
-                      value={citizenData.city}
-                      onChange={e => setCitizenData({ ...citizenData, city: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border text-xs outline-none disabled:opacity-75"
-                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>{t("profile.pincode")}</label>
-                    <input
-                      disabled={!isEditing}
-                      value={citizenData.pincode}
-                      onChange={e => setCitizenData({ ...citizenData, pincode: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border text-xs outline-none disabled:opacity-75"
-                      style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* PANCHAYAT PROFILE FIELDS */}
-          {role === "panchayat" && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Panchayat Name</label>
-                <input
-                  disabled={!isEditing}
-                  value={panchayatData.panchayatName}
-                  onChange={e => setPanchayatData({ ...panchayatData, panchayatName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Mukhiya / Sarpanch Name</label>
-                  <input
-                    disabled={!isEditing}
-                    value={panchayatData.mukhiyaName}
-                    onChange={e => setPanchayatData({ ...panchayatData, mukhiyaName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Official Phone Number</label>
-                  <input
-                    disabled={!isEditing}
-                    value={panchayatData.phone}
-                    onChange={e => setPanchayatData({ ...panchayatData, phone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Office Address</label>
-                <input
-                  disabled={!isEditing}
-                  value={panchayatData.officeAddress}
-                  onChange={e => setPanchayatData({ ...panchayatData, officeAddress: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>District</label>
-                  <input
-                    disabled={!isEditing}
-                    value={panchayatData.district}
-                    onChange={e => setPanchayatData({ ...panchayatData, district: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Block</label>
-                  <input
-                    disabled={!isEditing}
-                    value={panchayatData.block}
-                    onChange={e => setPanchayatData({ ...panchayatData, block: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Village(s)</label>
-                  <input
-                    disabled={!isEditing}
-                    value={panchayatData.villages}
-                    onChange={e => setPanchayatData({ ...panchayatData, villages: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* LOCAL ORGANISATION (RWA) PROFILE FIELDS */}
-          {(role === "localorg" || role === "org-victim") && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Organisation Name</label>
-                <input
-                  disabled={!isEditing}
-                  value={localOrgData.orgName}
-                  onChange={e => setLocalOrgData({ ...localOrgData, orgName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>SPOC Name</label>
-                  <input
-                    disabled={!isEditing}
-                    value={localOrgData.spocName}
-                    onChange={e => setLocalOrgData({ ...localOrgData, spocName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Designation</label>
-                  <input
-                    disabled={!isEditing}
-                    value={localOrgData.designation}
-                    onChange={e => setLocalOrgData({ ...localOrgData, designation: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Office Address</label>
-                <input
-                  disabled={!isEditing}
-                  value={localOrgData.officeAddress}
-                  onChange={e => setLocalOrgData({ ...localOrgData, officeAddress: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>District</label>
-                  <input
-                    disabled={!isEditing}
-                    value={localOrgData.district}
-                    onChange={e => setLocalOrgData({ ...localOrgData, district: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Block</label>
-                  <input
-                    disabled={!isEditing}
-                    value={localOrgData.block}
-                    onChange={e => setLocalOrgData({ ...localOrgData, block: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Panchayat / Area</label>
-                  <input
-                    disabled={!isEditing}
-                    value={localOrgData.area}
-                    onChange={e => setLocalOrgData({ ...localOrgData, area: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* UNIVERSITY PROFILE FIELDS */}
-          {role === "university" && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>University / Institute Name</label>
-                <input
-                  disabled={!isEditing}
-                  value={uniData.uniName}
-                  onChange={e => setUniData({ ...uniData, uniName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>SPOC Name</label>
-                  <input
-                    disabled={!isEditing}
-                    value={uniData.spocName}
-                    onChange={e => setUniData({ ...uniData, spocName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Contact Number</label>
-                  <input
-                    disabled={!isEditing}
-                    value={uniData.phone}
-                    onChange={e => setUniData({ ...uniData, phone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Campus Address</label>
-                <input
-                  disabled={!isEditing}
-                  value={uniData.address}
-                  onChange={e => setUniData({ ...uniData, address: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Core Expertise Areas</label>
-                <input
-                  disabled={!isEditing}
-                  value={uniData.expertise}
-                  onChange={e => setUniData({ ...uniData, expertise: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* INDUSTRY PROFILE FIELDS */}
-          {role === "industry" && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Industry / Company Name</label>
-                <input
-                  disabled={!isEditing}
-                  value={industryData.industryName}
-                  onChange={e => setIndustryData({ ...industryData, industryName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>SPOC Name</label>
-                  <input
-                    disabled={!isEditing}
-                    value={industryData.spocName}
-                    onChange={e => setIndustryData({ ...industryData, spocName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Category</label>
-                  <input
-                    disabled={!isEditing}
-                    value={industryData.category}
-                    onChange={e => setIndustryData({ ...industryData, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Company Address</label>
-                <input
-                  disabled={!isEditing}
-                  value={industryData.address}
-                  onChange={e => setIndustryData({ ...industryData, address: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Expertise Areas</label>
-                  <input
-                    disabled={!isEditing}
-                    value={industryData.expertise}
-                    onChange={e => setIndustryData({ ...industryData, expertise: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Official Email</label>
-                  <input
-                    disabled={!isEditing}
-                    value={industryData.email}
-                    onChange={e => setIndustryData({ ...industryData, email: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ORG SOLVER PROFILE FIELDS */}
-          {(role === "org-solver" || role === "org") && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Organisation Name</label>
-                <input
-                  disabled={!isEditing}
-                  value={orgSolverData.orgName}
-                  onChange={e => setOrgSolverData({ ...orgSolverData, orgName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>SPOC / Leader Name</label>
-                  <input
-                    disabled={!isEditing}
-                    value={orgSolverData.spocName}
-                    onChange={e => setOrgSolverData({ ...orgSolverData, spocName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Contact Phone</label>
-                  <input
-                    disabled={!isEditing}
-                    value={orgSolverData.phone}
-                    onChange={e => setOrgSolverData({ ...orgSolverData, phone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                    style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Focus Areas</label>
-                <input
-                  disabled={!isEditing}
-                  value={orgSolverData.focus}
-                  onChange={e => setOrgSolverData({ ...orgSolverData, focus: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: "var(--text)" }}>Address</label>
-                <input
-                  disabled={!isEditing}
-                  value={orgSolverData.address}
-                  onChange={e => setOrgSolverData({ ...orgSolverData, address: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border text-xs outline-none disabled:opacity-75"
-                  style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                />
-              </div>
-            </div>
-          )}
-
-          {isEditing && (
-            <div className="mt-5 pt-3 border-t flex gap-2" style={{ borderColor: "var(--border)" }}>
-              <Btn onClick={handleSave} className="flex-1" icon={<CheckCircle size={16} />}>
-                {t("profile.save")}
-              </Btn>
-              <Btn variant="secondary" onClick={() => setIsEditing(false)} className="px-4">
-                Cancel
-              </Btn>
-            </div>
-          )}
-        </Card>
-
-        {/* Quick Actions */}
-        <div className="flex gap-3">
-          <button onClick={() => { signOut(auth).catch(() => {}); onNav("landing"); }}
-            className="flex-1 p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-            style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--error)" }}>
-            <LogOut size={14} /> {t("nav.logout")}
-          </button>
-        </div>
-      </div>
-
-      <MobileNav onNav={onNav} activeScreen="profile" />
-    </div>
-  );
-}
-
-function NotificationsScreen({ onNav, role }: { onNav: (s: Screen) => void; role: string }) {
-  const { t } = useApp();
-  const allNotifs: Record<string, any[]> = {
-    citizen: [],
-    localorg: [],
-    "org-solver": [],
-    university: [],
-    industry: [],
-    panchayat: [],
-  };
-  const notifs = allNotifs[role as keyof typeof allNotifs] || allNotifs.citizen;
-
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <NavBar role={role} screen="notifications" onNav={onNav} />
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <button onClick={() => onNav(getHomeDashboard(role))} className="text-xs flex items-center gap-1 mb-4 transition-all"
-          style={{ color: "var(--text-muted)" }}><ArrowLeft size={13} /> Back to Dashboard</button>
-        <h1 className="text-xl font-black flex items-center gap-2 mb-1" style={{ color: "var(--navy)" }}>
-          <Bell size={22} /> {t("notif.title")}
-        </h1>
-        <p className="text-xs mb-5" style={{ color: "var(--text-muted)" }}>
-          {notifs.filter(n => !n.read).length} {t("notif.unread")}
-        </p>
-        <div className="space-y-3">
-          {notifs.map((n, i) => (
-            <Card key={i} className="p-4" onClick={() => onNav(n.screen)}>
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: n.read ? "var(--bg)" : "var(--success-bg)" }}>
-                  {n.icon}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold" style={{ color: "var(--text)", opacity: n.read ? 0.65 : 1 }}>
-                    {n.title}
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{n.sub}</p>
-                  <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{n.time}</p>
-                </div>
-                {!n.read && <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5"
-                  style={{ background: "var(--navy)" }} />}
-              </div>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── FEEDBACK ────────────────────────────────────────────────────────────────
 function FeedbackScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
   const [rating, setRating] = useState(0);
@@ -6305,6 +4808,44 @@ function FilteredProblemsList({ title, color, problems, onBack, onNav }: { title
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: string }) {
+  const { t } = useApp();
+  const [email, setEmail] = useState("Loading...");
+
+  useEffect(() => {
+    import('./firebase/config').then(({ auth }) => {
+      if (auth.currentUser) setEmail(auth.currentUser.email || "No email");
+      else setEmail("Not logged in");
+    });
+  }, []);
+
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role={role} screen="profile" onNav={onNav} />
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10 text-center">
+        <div className="w-24 h-24 mx-auto rounded-full bg-slate-200 flex items-center justify-center mb-4">
+          <User size={40} className="text-slate-400" />
+        </div>
+        <h1 className="text-xl font-black text-slate-800 dark:text-white mb-1">{t("nav.profile")}</h1>
+        <p className="text-sm text-slate-500 mb-8">{email}</p>
+        
+        <Card className="p-4 text-left space-y-4">
+           <Btn variant="ghost" className="w-full justify-start text-red-500" onClick={() => {
+              import('./firebase/config').then(({ auth }) => {
+                import('firebase/auth').then(({ signOut }) => {
+                  signOut(auth).then(() => onNav("landing"));
+                });
+              });
+           }}>
+             <LogOut size={18} className="mr-2" /> Sign Out
+           </Btn>
+        </Card>
       </div>
     </div>
   );

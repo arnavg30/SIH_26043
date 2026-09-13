@@ -230,3 +230,21 @@ export async function findSimilarIdeas(ideas?: {text: string, location: string}[
   });
 }
 export async function getStats() { const res = await apiFetch('/api/stats'); return res.json(); }
+
+export async function getProblemDetails(code: string) {
+  const res = await apiFetch("/api/problems/");
+  return res;
+}
+
+export async function getProblemsNearMe(lat: number, lng: number) {
+  const res = await apiFetch(`/api/problems/nearby?lat=${lat}&lng=${lng}`);
+  return res;
+}
+
+export async function getNotifications() {
+  return apiFetch('/api/notifications');
+}
+
+export async function markNotificationRead(id: number) {
+  return apiFetch(`/api/notifications/${id}/read`, { method: 'PATCH' });
+}

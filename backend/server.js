@@ -830,13 +830,18 @@ app.post("/api/problems", verifyToken, upload.array("media", 10), async (req, re
     const user = await getDbUser(req.user.uid);
     if (!user) return res.status(404).json({ message: "User not synced" });
 
-    const {
+    let {
       categoryId: rawCategoryId, categoryName, title, description, latitude, longitude,
       district, block, panchayatWard, landmark, siteAddress,
       reportedFor = "Myself", beneficiaryName, beneficiaryPhone, isAnonymous = false,
       severity = "MEDIUM", voiceDurationSeconds,
       priorityScore, aiCategory, aiConfidence, isDuplicate, duplicateOfId, requiredSkills, expectedImpact
     } = req.body || {};
+
+    // Auto-generate title from description if description exists
+    if (!title || title === "Voice-recorded problem report" || title.length > 30) {
+       title = (description || "").trim().split(/\s+/).slice(0, 5).join(" ") + "...";
+    }
 
     if ((!rawCategoryId && !clean(categoryName)) || !clean(title) || !clean(description) || !clean(district) || !clean(block) || !clean(siteAddress)) {
       return res.status(400).json({ message: "category, title, description, district, block and siteAddress are required" });
@@ -1004,6 +1009,7 @@ app.get("/api/problems/recommended", verifyToken, async (req, res) => {
       FROM problems p
       JOIN problem_categories c ON c.category_id = p.category_id
       WHERE p.status IN ('SUBMITTED', 'UNDER_REVIEW')
+      ORDER BY p.created_at DESC
     `;
     let params = [];
     
