@@ -120,6 +120,30 @@ app.get("/", (req, res) => {
   res.json({ message: "SIH Backend is running" });
 });
 
+app.get("/api/stats", async (req, res) => {
+  try {
+    const problemsCount = await pool.query("SELECT COUNT(*) FROM problems");
+    const solvedCount = await pool.query("SELECT COUNT(*) FROM problems WHERE status = 'SOLVED'");
+    const usersCount = await pool.query("SELECT COUNT(*) FROM users");
+    const impactRes = await pool.query("SELECT SUM(people_benefited) as total_people, SUM(money_saved) as total_money FROM impact_reports");
+    const villageCount = await pool.query("SELECT COUNT(DISTINCT village) FROM problems WHERE village IS NOT NULL AND village != ''");
+    
+    res.json({
+      success: true,
+      reported: parseInt(problemsCount.rows[0].count),
+      deployed: parseInt(solvedCount.rows[0].count),
+      benefited: parseInt(impactRes.rows[0].total_people) || 0,
+      savings: parseFloat(impactRes.rows[0].total_money) || 0,
+      villages: parseInt(villageCount.rows[0].count),
+      solutions: parseInt(solvedCount.rows[0].count),
+      users: parseInt(usersCount.rows[0].count)
+    });
+  } catch (err) {
+    console.error("Stats error:", err);
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
 app.get("/api/health", async (req, res) => {
   try {
     await pool.query("SELECT 1");

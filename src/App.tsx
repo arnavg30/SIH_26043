@@ -36,13 +36,13 @@ interface AppCtx {
   t: (key: string) => string;
   role: string;
   setRole: (r: string) => void;
-  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; audioDurationSeconds: number; latitude: string; longitude: string; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string; aiAnalysis: any; impactReport: any };
+  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; audioDurationSeconds: number; latitude: string; longitude: string; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string; aiAnalysis: any; impactReport: any; status: string | undefined };
   setReport: React.Dispatch<React.SetStateAction<AppCtx["report"]>>;
 }
 const Ctx = createContext<AppCtx>({
   lang: "en", setLang: () => {}, dark: false, setDark: () => {}, t: (k) => k,
   role: "citizen", setRole: () => {},
-  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null, impactReport: null }, setReport: () => {},
+  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null, impactReport: null, status: undefined }, setReport: () => {},
 });
 const useApp = () => useContext(Ctx);
 const isValidMobile = (value: string) => /^\d{10}$/.test(value.replace(/\D/g, ""));
@@ -523,6 +523,16 @@ function SimpleNavHeader({ onBack, onNav }: { onBack?: () => void; onNav?: (s: S
 function LandingScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, lang, setLang, dark, setDark } = useApp();
   const [langOpen, setLangOpen] = useState(false);
+  const [stats, setStats] = useState({ reported: 0, deployed: 0, benefited: 0 });
+  useEffect(() => {
+    import('./api').then(({ getStats }) => {
+      getStats().then(data => {
+        if (data && data.success) {
+          setStats({ reported: data.reported, deployed: data.deployed, benefited: data.benefited });
+        }
+      }).catch(console.error);
+    });
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
@@ -588,9 +598,9 @@ function LandingScreen({ onNav }: { onNav: (s: Screen) => void }) {
         {/* Stats */}
         <div className="flex items-center justify-center gap-6 mt-8">
           {[
-            { val: "4,280", key: "landing.stats.reported" },
-            { val: "312", key: "landing.stats.deployed" },
-            { val: "2.4L+", key: "landing.stats.benefited" },
+            { val: stats.reported.toLocaleString(), key: "landing.stats.reported" },
+            { val: stats.deployed.toLocaleString(), key: "landing.stats.deployed" },
+            { val: stats.benefited >= 100000 ? (stats.benefited / 100000).toFixed(1) + "L+" : stats.benefited.toLocaleString(), key: "landing.stats.benefited" },
           ].map(s => (
             <div key={s.key} className="text-center">
               <div className="text-2xl font-black" style={{ color: "var(--amber)" }}>{s.val}</div>
@@ -599,7 +609,7 @@ function LandingScreen({ onNav }: { onNav: (s: Screen) => void }) {
           ))}
         </div>
         <p className="text-xs mt-2" style={{ color: "rgba(255,255,255,0.35)" }}>
-          * {t("landing.demodata")}
+          * Real-time metrics from NavJhar database
         </p>
       </div>
 
@@ -1817,19 +1827,18 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
         {/* Recent */}
         <h2 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>{t("cit.myrecent")}</h2>
-        {[
-          { title: "Handpump kharab hai", loc: "Bakri Bazar", status: "in-progress", id: "JH-WTR-1024" },
-          { title: "Road potholes near school", loc: "Kanke Chowk", status: "under-review", id: "JH-RD-982" },
-        ].map(p => (
+        {problems.length === 0 ? (
+          <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>No recent reports.</p>
+        ) : problems.slice(0, 5).map((p: any) => (
           <Card key={p.id} className="p-4 mb-3" onClick={() => onNav("tracking")}>
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>{p.title}</p>
+                <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>{p.description || p.title || "Citizen Report"}</p>
                 <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-                  <MapPin size={11} /> {p.loc}
+                  <MapPin size={11} /> {p.village || p.district || "Location"}
                 </p>
                 <div className="flex items-center gap-2 mt-2">
-                  <StatusBadge status={p.status} />
+                  <StatusBadge status={p.status === "SOLVED" ? "resolved" : p.status === "IN_PROGRESS" || p.status === "ASSIGNED" ? "in-progress" : p.status === "PENDING" ? "under-review" : "new"} />
                   <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>{p.id}</span>
                 </div>
               </div>
@@ -1920,20 +1929,18 @@ function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         {/* Recent Problems in Panchayat */}
         <div>
           <h2 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Recent Problems in My Panchayat</h2>
-          {[
-            { title: "Handpump kharab — Ward 3", sub: "Bakri Bazar", status: "under-review", id: "JH-WTR-1024" },
-            { title: "Road damaged near school", sub: "Kanke Chowk", status: "in-progress", id: "JH-RD-982" },
-            { title: "Street lights not working", sub: "Lalgutwa", status: "submitted", id: "JH-EL-456" },
-          ].map(p => (
+          {problems.length === 0 ? (
+            <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>No recent reports.</p>
+          ) : problems.slice(0, 5).map((p: any) => (
             <Card key={p.id} className="p-4 mb-3 cursor-pointer card-hover" onClick={() => onNav("tracking")}>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>{p.title}</p>
+                  <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>{p.description || p.title || "Citizen Report"}</p>
                   <p className="text-xs flex items-center gap-1 mt-0.5" style={{ color: "var(--text-muted)" }}>
-                    <MapPin size={11} /> {p.sub}
+                    <MapPin size={11} /> {p.village || p.district || "Location"}
                   </p>
                   <div className="flex items-center gap-2 mt-2">
-                    <StatusBadge status={p.status} />
+                    <StatusBadge status={p.status === "SOLVED" ? "resolved" : p.status === "IN_PROGRESS" || p.status === "ASSIGNED" ? "in-progress" : p.status === "PENDING" ? "under-review" : "new"} />
                     <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>{p.id}</span>
                   </div>
                 </div>
@@ -2307,8 +2314,14 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
   const profile = useProfileDisplay("org-solver");
   const [problems, setProblems] = useState<any[]>([]);
+  const [stats, setStats] = useState({ benefited: 0 });
   const [selectedFilter, setSelectedFilter] = useState<{title: string, color: string, filterStr: string}|null>(null);
-  useEffect(() => { getRecommendedProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
+  useEffect(() => {
+    getRecommendedProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error);
+    import('./api').then(({ getStats }) => {
+      getStats().then(data => { if (data && data.success) setStats(data); }).catch(console.error);
+    });
+  }, []);
   if (selectedFilter) {
     let fp = problems;
     if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS");
@@ -2329,7 +2342,7 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
             { icon: <Layers size={18} />, label: t("org.recommended"), value: problems.length.toString(), color: "var(--amber)", screen: "uni-dashboard" as Screen },
             { icon: <Briefcase size={18} />, label: t("org.collabs"), value: problems.filter(p => p.status === "IN_PROGRESS").length.toString(), color: "var(--green)", screen: "project-lifecycle" as Screen },
             { icon: <CheckCircle size={18} />, label: t("org.completed"), value: problems.filter(p => p.status === "SOLVED").length.toString(), color: "var(--success)", screen: "" as Screen },
-            { icon: <Users size={18} />, label: t("org.reach"), value: "12K", color: "var(--navy)", screen: "" as Screen },
+            { icon: <Users size={18} />, label: t("org.reach"), value: stats.benefited >= 1000 ? (stats.benefited / 1000).toFixed(1) + "K" : stats.benefited.toString(), color: "var(--navy)", screen: "" as Screen },
           ].map(k => (
             <div key={k.label} onClick={() => setSelectedFilter({ title: k.label, color: k.color, filterStr: k.label.includes("Completed") || k.label.includes("Resolved") ? "SOLVED" : k.label.includes("Collab") || k.label.includes("Active") ? "IN_PROGRESS" : "ALL" })} className="cursor-pointer active:scale-95 transition-all">
               <KPICard icon={k.icon} label={k.label} value={k.value} color={k.color} />
@@ -4078,14 +4091,10 @@ function TrackingScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t, role } = useApp();
   const { report } = useApp();
   const timeline = [
-    { label: "Challenge Submitted", sub: "Ram Kumar • Aug 28, 2026", done: true },
-    { label: "AI Processed", sub: "Water Mgmt • Priority: 87/100", done: true },
-    { label: "Government Verified", sub: "Ranchi District • Aug 30", done: true },
-    { label: "University Matched", sub: "BIT Mesra — 92% match", done: true },
-    { label: "Institution Assigned", sub: "Assigned to BIT Mesra", done: true },
-    { label: "Development", sub: "Working on smart monitoring solution…", active: true },
-    { label: "Field Testing", sub: "Expected: Sep 20, 2026", pending: true },
-    { label: "Implementation", sub: "Expected: Oct 15, 2026", pending: true },
+    { label: "Challenge Submitted", sub: report.problemCode || "Pending", done: true },
+    { label: "AI Processed", sub: report.aiAnalysis ? `Priority: ${report.aiAnalysis.priority_score || 0}/100` : "Pending", done: !!report.aiAnalysis, active: !report.aiAnalysis },
+    { label: "Government Verified", sub: "District Level Verification", done: report.status === "VERIFIED" || report.status === "SOLVED", active: report.status === "PENDING" && !!report.aiAnalysis, pending: !report.aiAnalysis },
+    { label: "Solution Implemented", sub: "Solution marked as deployed", done: report.status === "SOLVED", pending: report.status !== "SOLVED" }
   ];
   return (
     <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
@@ -4305,15 +4314,17 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
           }).catch(console.error);
         }
       });
+      return () => unsubscribe();
+    });
+  }, []);
+
   if (selectedFilter) {
     let fp = problems;
     if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS");
     if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
     return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
   }
-      return () => unsubscribe();
-    });
-  }, []);
+
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
@@ -4330,10 +4341,10 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
           {[
             { icon: <Bell size={18} />, label: "New Challenges", value: problems.length.toString(), color: "var(--amber)" },
-            { icon: <CheckCircle size={18} />, label: "Accepted", value: "0", color: "var(--green)" },
-            { icon: <Activity size={18} />, label: "Active Projects", value: "0", color: "var(--navy)" },
-            { icon: <ThumbsUp size={18} />, label: "Completed", value: "0", color: "var(--success)" },
-            { icon: <AlertTriangle size={18} />, label: "At Risk", value: "0", color: "var(--error)" },
+            { icon: <CheckCircle size={18} />, label: "Accepted", value: myProjects.length.toString(), color: "var(--green)" },
+            { icon: <Activity size={18} />, label: "Active Projects", value: myProjects.filter((p: any) => p.status === 'IN_PROGRESS' || p.status === 'ASSIGNED').length.toString(), color: "var(--navy)" },
+            { icon: <ThumbsUp size={18} />, label: "Completed", value: myProjects.filter((p: any) => p.status === 'SOLVED').length.toString(), color: "var(--success)" },
+            { icon: <AlertTriangle size={18} />, label: "At Risk", value: myProjects.filter((p: any) => p.status === 'AT_RISK').length.toString(), color: "var(--error)" },
           ].map(k => <KPICard key={k.label} {...k} />)}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -4652,9 +4663,9 @@ function ProjectLifecycleScreen({ onNav }: { onNav: (s: Screen) => void }) {
         <Card className="p-5">
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h1 className="text-lg font-black" style={{ color: "var(--navy)" }}>Smart Irrigation Monitoring System</h1>
+              <h1 className="text-lg font-black" style={{ color: "var(--navy)" }}>{report?.description || "Project Implementation"}</h1>
               <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                JH-WTR-1024 • BIT Mesra × AquaSense IoT • Kanke, Ranchi
+                {report?.problemCode || "Unknown Code"} • {report?.district || "Unknown District"}
               </p>
             </div>
             <div className="text-right">
@@ -4731,7 +4742,7 @@ function ProjectLifecycleScreen({ onNav }: { onNav: (s: Screen) => void }) {
                      onClick={async () => {
                        try {
                          const { markSolved } = await import("./api");
-                         const res = await markSolved("JH-WTR-1024");
+                         const res = await markSolved(report?.problemCode || "JH-WTR-1024");
                          if (res && res.report) {
                            setReport(curr => ({ ...curr, impactReport: res.report }));
                            alert("Solved! " + res.message);
@@ -4837,15 +4848,16 @@ function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
           }).catch(console.error);
         }
       });
+      return () => unsubscribe();
+    });
+  }, []);
+
   if (selectedFilter) {
     let fp = problems;
     if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS");
     if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
     return <FilteredProblemsList title={selectedFilter.title} color={selectedFilter.color} problems={fp} onBack={() => setSelectedFilter(null)} onNav={onNav} />;
   }
-      return () => unsubscribe();
-    });
-  }, []);
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
@@ -4862,9 +4874,9 @@ function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           {[
             { icon: <Bell size={18} />, label: "Recommended Projects", value: problems.length.toString(), color: "var(--amber)" },
-            { icon: <Users size={18} />, label: "Active Partnerships", value: "0", color: "var(--green)" },
-            { icon: <GraduationCap size={18} />, label: "Mentorship", value: "0", color: "var(--navy)" },
-            { icon: <TrendingUp size={18} />, label: "CSR Funding (?L)", value: "0", color: "#7C3AED" },
+            { icon: <Users size={18} />, label: "Active Partnerships", value: myProjects.filter((p: any) => p.status === 'IN_PROGRESS' || p.status === 'ASSIGNED').length.toString(), color: "var(--green)" },
+            { icon: <GraduationCap size={18} />, label: "Mentorship", value: myProjects.length.toString(), color: "var(--navy)" },
+            { icon: <TrendingUp size={18} />, label: "CSR Funding (L)", value: "0", color: "#7C3AED" },
           ].map(k => <KPICard key={k.label} {...k} />)}
         </div>
 
@@ -5355,8 +5367,16 @@ function SolutionDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── IMPACT DASHBOARD ─────────────────────────────────────────────────────────
 function ImpactDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
-  const [problems, setProblems] = useState<any[]>([]);
-  useEffect(() => { getRecommendedProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
+  const [stats, setStats] = useState({ reported: 0, deployed: 0, benefited: 0, savings: 0, villages: 0, solutions: 0 });
+  useEffect(() => {
+    import('./api').then(({ getStats }) => {
+      getStats().then(data => {
+        if (data && data.success) {
+          setStats(data);
+        }
+      }).catch(console.error);
+    });
+  }, []);
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       <NavBar role="citizen" screen="impact-dashboard" onNav={onNav} />
@@ -5365,15 +5385,15 @@ function ImpactDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
           <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
             <TrendingUp size={22} /> Impact Dashboard
           </h1>
-          <span className="text-xs px-2 py-1 rounded-lg" style={{ background: "var(--warning-bg)", color: "var(--warning)" }}>Demo Data</span>
+          <span className="text-xs px-2 py-1 rounded-lg" style={{ background: "var(--success-bg)", color: "var(--success)" }}>Live Data</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           {[
-            { icon: <Users size={18} />, label: t("impact.people"), value: (problems.length * 1200).toString(), color: "var(--green)" },
-            { icon: <Map size={18} />, label: t("impact.villages"), value: problems.length.toString(), color: "var(--navy)" },
-            { icon: <Lightbulb size={18} />, label: t("impact.solutions"), value: problems.length.toString(), color: "#7C3AED" },
-            { icon: <TrendingUp size={18} />, label: t("impact.savings") + " (₹Cr)", value: "18.4", color: "#B45309" },
+            { icon: <Users size={18} />, label: t("impact.people"), value: stats.benefited.toLocaleString(), color: "var(--green)" },
+            { icon: <Map size={18} />, label: t("impact.villages"), value: stats.villages.toLocaleString(), color: "var(--navy)" },
+            { icon: <Lightbulb size={18} />, label: t("impact.solutions"), value: stats.solutions.toLocaleString(), color: "#7C3AED" },
+            { icon: <TrendingUp size={18} />, label: t("impact.savings") + " (₹)", value: stats.savings.toLocaleString(), color: "#B45309" },
           ].map(k => <KPICard key={k.label} {...k} />)}
         </div>
 
@@ -5381,35 +5401,7 @@ function ImpactDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
           <Card className="p-5">
             <h3 className="font-bold text-sm mb-4" style={{ color: "var(--text)" }}>Before vs. After — Water</h3>
             <div className="space-y-4">
-              {[
-                { label: "Canal Water Loss", before: 40, after: 8, unit: "%" },
-                { label: "Handpump Failures (Unresolved)", before: 85, after: 12, unit: "%" },
-                { label: "Irrigation Coverage", before: 45, after: 78, unit: "% of farmland" },
-              ].map(m => (
-                <div key={m.label}>
-                  <p className="text-xs font-semibold mb-2" style={{ color: "var(--text)" }}>{m.label}</p>
-                  <div className="space-y-1.5">
-                    <div>
-                      <div className="flex justify-between text-xs mb-0.5">
-                        <span style={{ color: "var(--text-muted)" }}>Before</span>
-                        <span className="font-bold" style={{ color: "var(--error)" }}>{m.before}{m.unit}</span>
-                      </div>
-                      <div className="h-2.5 rounded-full" style={{ background: "var(--error-bg)" }}>
-                        <div className="h-2.5 rounded-full" style={{ width: `${m.before}%`, background: "var(--error)" }} />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-xs mb-0.5">
-                        <span style={{ color: "var(--text-muted)" }}>After</span>
-                        <span className="font-bold" style={{ color: "var(--success)" }}>{m.after}{m.unit}</span>
-                      </div>
-                      <div className="h-2.5 rounded-full" style={{ background: "var(--success-bg)" }}>
-                        <div className="h-2.5 rounded-full" style={{ width: `${m.after}%`, background: "var(--success)" }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>No before/after data yet.</p>
             </div>
           </Card>
 
@@ -5418,21 +5410,7 @@ function ImpactDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
               <Star size={15} /> Citizen Feedback
             </h3>
             <div className="space-y-3">
-              {[
-                { name: "Ram Kumar, Bakri Bazar", rating: 5, text: "The handpump is fixed. Now we get water in the morning. Very happy!" },
-                { name: "Sunita Devi, Lalgutwa", rating: 4, text: "Canal water is much better now. My crop is growing well this season." },
-                { name: "Mukesh Oraon, Kanke", rating: 5, text: "The app is easy to use. Problem was fixed within 2 months!" },
-              ].map((r, i) => (
-                <div key={i} className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>{r.name}</span>
-                    <div className="flex">
-                      {[...Array(r.rating)].map((_, j) => <Star key={j} size={11} fill="var(--amber)" color="var(--amber)" />)}
-                    </div>
-                  </div>
-                  <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>"{r.text}"</p>
-                </div>
-              ))}
+              <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>No feedback data yet.</p>
             </div>
           </Card>
 
@@ -5441,21 +5419,7 @@ function ImpactDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
               <Leaf size={15} color="var(--green)" /> Environmental Impact
             </h3>
             <div className="space-y-3">
-              {[
-                { icon: <Droplets size={18} />, val: "48 Cr litres/year", label: "Water Conserved" },
-                { icon: <Leaf size={18} />, val: "1,240 tonnes/year", label: "CO₂ Avoided" },
-                { icon: <Zap size={18} />, val: "18,000 kWh/month", label: "Solar Generated" },
-                { icon: <Leaf size={18} />, val: "12,400+", label: "Trees Planted" },
-              ].map(e => (
-                <div key={e.label} className="flex items-center gap-3 p-3 rounded-xl"
-                  style={{ background: "var(--success-bg)" }}>
-                  <span style={{ color: "var(--green)" }}>{e.icon}</span>
-                  <div>
-                    <p className="text-sm font-bold" style={{ color: "var(--green)" }}>{e.val}</p>
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>{e.label}</p>
-                  </div>
-                </div>
-              ))}
+              <p className="text-xs italic" style={{ color: "var(--text-muted)" }}>Environmental aggregation pending.</p>
             </div>
           </Card>
         </div>
@@ -6141,33 +6105,13 @@ function ProfileScreen({ onNav, role }: { onNav: (s: Screen) => void; role: stri
 
 function NotificationsScreen({ onNav, role }: { onNav: (s: Screen) => void; role: string }) {
   const { t } = useApp();
-  const allNotifs = {
-    citizen: [
-      { icon: <CheckCircle size={18} color="var(--success)" />, title: "Challenge Verified", sub: "JH-WTR-1024 verified by Ranchi Collectorate.", time: "2h ago", read: false, screen: "tracking" as Screen },
-      { icon: <GraduationCap size={18} color="var(--navy)" />, title: "University Matched", sub: "BIT Mesra accepted your challenge.", time: "1d ago", read: false, screen: "tracking" as Screen },
-      { icon: <Building2 size={18} color="var(--green)" />, title: "Project Assigned", sub: "Assigned to BIT Mesra for execution.", time: "2d ago", read: true, screen: "tracking" as Screen },
-    ],
-    localorg: [
-      { icon: <Bell size={18} color="var(--amber)" />, title: "Problem Status Updated", sub: "JH-SAN-712 is now In Progress.", time: "2h ago", read: false, screen: "tracking" as Screen },
-      { icon: <CheckCircle size={18} color="var(--success)" />, title: "Problem Verified", sub: "JH-DRN-389 verified by administration.", time: "1d ago", read: true, screen: "tracking" as Screen },
-    ],
-    "org-solver": [
-      { icon: <Bell size={18} color="var(--amber)" />, title: "New Problem Available", sub: "Community issue matches your domain.", time: "3h ago", read: false, screen: "org-solver-dashboard" as Screen },
-    ],
-
-    university: [
-      { icon: <Bell size={18} color="var(--amber)" />, title: "New Challenge Assigned", sub: "Village Irrigation Canal Leakage — High Priority", time: "1h ago", read: false, screen: "uni-challenge-detail" as Screen },
-      { icon: <Factory size={18} color="var(--green)" />, title: "Industry Partner Joined", sub: "AquaSense IoT joined your project.", time: "4h ago", read: false, screen: "project-lifecycle" as Screen },
-      { icon: <AlertTriangle size={18} color="var(--warning)" />, title: "Testing Milestone Behind", sub: "4 days behind schedule.", time: "1d ago", read: false, screen: "project-health" as Screen },
-    ],
-    industry: [
-      { icon: <Bell size={18} color="var(--amber)" />, title: "New Project Match", sub: "Smart Irrigation — 89% industry match.", time: "2h ago", read: false, screen: "industry-project-detail" as Screen },
-      { icon: <CheckCircle size={18} color="var(--success)" />, title: "Partnership Confirmed", sub: "BIT Mesra confirmed your partnership.", time: "1d ago", read: true, screen: "project-lifecycle" as Screen },
-    ],
-    panchayat: [
-      { icon: <Bell size={18} color="var(--amber)" />, title: "New Problem Submitted", sub: "Bakri Bazar citizen reported a water problem.", time: "1h ago", read: false, screen: "panchayat-dashboard" as Screen },
-      { icon: <CheckCircle size={18} color="var(--success)" />, title: "Problem Verified", sub: "JH-WTR-1024 verified by government.", time: "2d ago", read: true, screen: "tracking" as Screen },
-    ],
+  const allNotifs: Record<string, any[]> = {
+    citizen: [],
+    localorg: [],
+    "org-solver": [],
+    university: [],
+    industry: [],
+    panchayat: [],
   };
   const notifs = allNotifs[role as keyof typeof allNotifs] || allNotifs.citizen;
 
@@ -6361,7 +6305,7 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
   const [screen, setScreen] = useState<Screen>(() => (localStorage.getItem("active_screen") as Screen) || "landing");
   const [role, setRole] = useState("citizen");
-  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null as any, impactReport: null as any });
+  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null as any, impactReport: null as any, status: undefined as string | undefined });
   // On initial website load, show language selection popup, followed immediately by Mitra full-body welcome
   const [showLangModal, setShowLangModal] = useState(() => !localStorage.getItem("jsic_lang"));
   const [showMitraWelcome, setShowMitraWelcome] = useState(false);

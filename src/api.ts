@@ -229,3 +229,4 @@ export async function findSimilarIdeas(ideas?: {text: string, location: string}[
     body: JSON.stringify({ ideas })
   });
 }
+export async function getStats() { const res = await apiFetch('/api/stats'); return res.json(); }
