@@ -23,7 +23,7 @@ import {
   syncAuth, getProfileMe,
   saveCitizenProfile, savePanchayatProfile, saveLocalOrgProfile,
   saveOrgProfile, saveIndustryProfile, saveUniProfile, submitProblem,
-  geocodeProblemAddress,
+  geocodeProblemAddress, analyzeProblemAI,
   getRecommendedProblems, getMyProblems, acceptProblem, submitSolutionAI, markSolved, transcribeAudio
 } from "./api";
 
@@ -36,13 +36,13 @@ interface AppCtx {
   t: (key: string) => string;
   role: string;
   setRole: (r: string) => void;
-  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; audioDurationSeconds: number; latitude: string; longitude: string; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string };
+  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; audioDurationSeconds: number; latitude: string; longitude: string; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string; aiAnalysis: any };
   setReport: React.Dispatch<React.SetStateAction<AppCtx["report"]>>;
 }
 const Ctx = createContext<AppCtx>({
   lang: "en", setLang: () => {}, dark: false, setDark: () => {}, t: (k) => k,
   role: "citizen", setRole: () => {},
-  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" }, setReport: () => {},
+  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null }, setReport: () => {},
 });
 const useApp = () => useContext(Ctx);
 const isValidMobile = (value: string) => /^\d{10}$/.test(value.replace(/\D/g, ""));
@@ -3809,8 +3809,9 @@ function ReportStep3Screen({ onNav }: { onNav: (s: Screen) => void }) {
 
 // ─── AI PROCESSING ────────────────────────────────────────────────────────────
 function AIProcessingScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
+  const { t, report, setReport } = useApp();
   const [step, setStep] = useState(0);
+  const [error, setError] = useState("");
   const steps = [
     t("ai.processing"),
     "Checking for similar reports…",
@@ -3819,13 +3820,37 @@ function AIProcessingScreen({ onNav }: { onNav: (s: Screen) => void }) {
   ];
 
   useEffect(() => {
+    let cancelled = false;
+    // Animate steps while waiting for API
     const timer = setInterval(() => {
-      setStep(s => {
-        if (s >= steps.length - 1) { clearInterval(timer); setTimeout(() => onNav("ai-result"), 800); return s; }
-        return s + 1;
+      setStep(s => Math.min(s + 1, steps.length - 2)); // stop at second-to-last
+    }, 1200);
+
+    // Call real AI analysis
+    analyzeProblemAI({
+      text: report.description || report.category || "Problem report",
+      latitude: report.latitude,
+      longitude: report.longitude,
+    })
+      .then((aiData: any) => {
+        if (cancelled) return;
+        clearInterval(timer);
+        setStep(steps.length - 1);
+        // Store AI result in report state
+        setReport(prev => ({ ...prev, aiAnalysis: aiData }));
+        setTimeout(() => { if (!cancelled) onNav("ai-result"); }, 600);
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        clearInterval(timer);
+        console.error("AI analysis failed:", err);
+        setError(err.message || "AI analysis failed. You can still submit your report.");
+        setStep(steps.length - 1);
+        // Navigate anyway after a delay so user isn't stuck
+        setTimeout(() => { if (!cancelled) onNav("ai-result"); }, 2000);
       });
-    }, 750);
-    return () => clearInterval(timer);
+
+    return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
   return (
@@ -3842,6 +3867,7 @@ function AIProcessingScreen({ onNav }: { onNav: (s: Screen) => void }) {
         </div>
         <h1 className="text-2xl font-black text-white mb-2">{t("ai.processing")}</h1>
         <p className="text-sm mb-8" style={{ color: "rgba(255,255,255,0.5)" }}>AI is understanding your problem</p>
+        {error && <p className="text-sm mb-4 px-4 py-2 rounded-lg" style={{ background: "rgba(239,68,68,0.2)", color: "#FCA5A5" }}>{error}</p>}
         <div className="w-full max-w-xs">
           {steps.map((s, i) => (
             <div key={i} className="flex items-center gap-3 py-2">
@@ -3911,9 +3937,9 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
           </h3>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { icon: <Layers size={18} color="var(--navy)" />, label: t("ai.category"), val: report.category || "Other", conf: "Selected by you" },
-              { icon: <AlertTriangle size={18} color="var(--error)" />, label: t("ai.priority"), val: "HIGH", conf: "87/100" },
-              { icon: <RefreshCw size={18} color="var(--warning)" />, label: t("ai.duplicate"), val: "4 Found", conf: "89% similar" },
+              { icon: <Layers size={18} color="var(--navy)" />, label: t("ai.category"), val: report.aiAnalysis?.category || report.category || "Other", conf: report.aiAnalysis?.confidence ? `${report.aiAnalysis.confidence}% conf` : "Manual" },
+              { icon: <AlertTriangle size={18} color="var(--error)" />, label: t("ai.priority"), val: report.aiAnalysis?.priorityScore ? `${report.aiAnalysis.priorityScore}/100` : "TBD", conf: "Priority Score" },
+              { icon: <RefreshCw size={18} color="var(--warning)" />, label: t("ai.duplicate"), val: report.aiAnalysis?.isDuplicate ? "Potential Match" : "Unique", conf: report.aiAnalysis?.duplicateOfId ? `ID: ${report.aiAnalysis.duplicateOfId}` : "" },
             ].map(r => (
               <div key={r.label} className="p-3 rounded-xl" style={{ background: "var(--bg)" }}>
                 <div className="mb-1">{r.icon}</div>
@@ -3931,12 +3957,11 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
           </h3>
           <div className="space-y-2">
             {[
-              ["Domain", report.category || "Other"],
-              ["Severity", "High — 3+ weeks unresolved"],
-              
-              ["Required Skills", "Civil + Water Mgmt + IoT"],
-              ["Expected Impact", "High — Essential service"],
-              ["Location", "Rural — 28 km from Ranchi"],
+              ["Domain", report.aiAnalysis?.category || report.category || "Other"],
+              ["Severity", report.aiAnalysis?.severity || "Pending Assessment"],
+              ["Required Skills", report.aiAnalysis?.requiredSkills || "TBD"],
+              ["Expected Impact", report.aiAnalysis?.expectedImpact || "TBD"],
+              ["Location", [report.village, report.panchayat, report.block, report.district].filter(Boolean).join(", ") || "Unknown"],
             ].map(([k, v]) => (
               <div key={k} className="flex gap-2 text-sm">
                 <span className="w-32 flex-shrink-0" style={{ color: "var(--text-muted)" }}>{k}</span>
@@ -3946,14 +3971,16 @@ function AIResultScreen({ onNav }: { onNav: (s: Screen) => void }) {
           </div>
         </Card>
 
-        <div className="p-4 rounded-xl border" style={{ background: "var(--warning-bg)", borderColor: "var(--warning)" }}>
-          <p className="text-sm font-semibold mb-1 flex items-center gap-2" style={{ color: "var(--warning)" }}>
-            <AlertTriangle size={15} /> 4 Similar Reports Found Nearby
-          </p>
-          <p className="text-xs" style={{ color: "var(--text)" }}>
-            These may describe the same problem and will be reviewed by the government validator.
-          </p>
-        </div>
+        {report.aiAnalysis?.isDuplicate && (
+          <div className="p-4 rounded-xl border" style={{ background: "var(--warning-bg)", borderColor: "var(--warning)" }}>
+            <p className="text-sm font-semibold mb-1 flex items-center gap-2" style={{ color: "var(--warning)" }}>
+              <AlertTriangle size={15} /> Similar Report Found Nearby
+            </p>
+            <p className="text-xs" style={{ color: "var(--text)" }}>
+              This may describe the same problem (ID: {report.aiAnalysis.duplicateOfId}) and will be grouped by the government validator.
+            </p>
+          </div>
+        )}
 
         <div className="flex gap-3">
           <Btn onClick={submitReport} disabled={submitting} className="flex-1 py-4 text-base"
@@ -6288,7 +6315,7 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
   const [screen, setScreen] = useState<Screen>(() => (localStorage.getItem("active_screen") as Screen) || "landing");
   const [role, setRole] = useState("citizen");
-  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" });
+  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null as any });
   // On initial website load, show language selection popup, followed immediately by Mitra full-body welcome
   const [showLangModal, setShowLangModal] = useState(() => !localStorage.getItem("jsic_lang"));
   const [showMitraWelcome, setShowMitraWelcome] = useState(false);
