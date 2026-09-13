@@ -17,7 +17,7 @@ import { MitraAssistant } from "./components/MitraAssistant";
 import LocationPickerMap from "./components/LocationPickerMap";
 import RecordedAudioPlayer from "./components/RecordedAudioPlayer";
 import useVoiceRecording from "./hooks/useVoiceRecording";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, reload, signOut } from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, reload, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "./firebase/config";
 import {
   syncAuth, getProfileMe,
@@ -77,8 +77,7 @@ function getHomeDashboard(role: string): Screen {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Screen =
-  | "landing"
+type Screen = "solver-dashboard" | "landing"
   | "victim-select" | "solver-select"
   | "citizen-login" | "citizen-dashboard"
   | "panchayat-login" | "panchayat-dashboard"
@@ -188,10 +187,10 @@ function Card({ children, className = "", onClick, style }: {
   );
 }
 
-function Btn({ children, variant = "primary", onClick, className = "", disabled = false, icon }: {
-  children: React.ReactNode; variant?: "primary" | "secondary" | "ghost" | "danger" | "success" | "nav";
-  onClick?: () => void; className?: string; disabled?: boolean; icon?: React.ReactNode;
-}) {
+function Btn({ children, variant = "primary", onClick, className = "", disabled = false, icon, type = "button" }: {
+    children: React.ReactNode; variant?: "primary" | "secondary" | "ghost" | "danger" | "success" | "nav";
+    onClick?: () => void; className?: string; disabled?: boolean; icon?: React.ReactNode; type?: "button" | "submit" | "reset";
+  }) {
   const styles: Record<string, React.CSSProperties> = {
     primary: { background: "var(--amber)", color: "var(--navy)", border: "none" },
     secondary: { background: "transparent", color: "var(--navy)", border: "1.5px solid var(--navy)" },
@@ -2172,6 +2171,8 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
 function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
   const profile = useProfileDisplay("org-solver");
+  const [problems, setProblems] = useState<any[]>([]);
+  useEffect(() => { getRecommendedProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
   return (
     <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
       <NavBar role="org-solver" screen="org-solver-dashboard" onNav={onNav} />
@@ -2183,9 +2184,9 @@ function OrgSolverDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         {/* KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { icon: <Layers size={18} />, label: t("org.recommended"), value: "6", color: "var(--amber)", screen: "uni-dashboard" as Screen },
-            { icon: <Briefcase size={18} />, label: t("org.collabs"), value: "3", color: "var(--green)", screen: "project-lifecycle" as Screen },
-            { icon: <CheckCircle size={18} />, label: t("org.completed"), value: "8", color: "var(--success)", screen: "" as Screen },
+            { icon: <Layers size={18} />, label: t("org.recommended"), value: problems.length.toString(), color: "var(--amber)", screen: "uni-dashboard" as Screen },
+            { icon: <Briefcase size={18} />, label: t("org.collabs"), value: problems.filter(p => p.status === "IN_PROGRESS").length.toString(), color: "var(--green)", screen: "project-lifecycle" as Screen },
+            { icon: <CheckCircle size={18} />, label: t("org.completed"), value: problems.filter(p => p.status === "SOLVED").length.toString(), color: "var(--success)", screen: "" as Screen },
             { icon: <Users size={18} />, label: t("org.reach"), value: "12K", color: "var(--navy)", screen: "" as Screen },
           ].map(k => (
             <div key={k.label} onClick={() => k.screen ? onNav(k.screen) : null} className={k.screen ? "cursor-pointer active:scale-95 transition-all" : ""}>
@@ -2842,7 +2843,7 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
 
   const handleTakePhotoClick = () => {
     if (report.files.length >= 10) return;
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    if (navigator.mediaDevices && "getUserMedia" in navigator.mediaDevices) {
       setIsCameraOpen(true);
     } else if (cameraInput.current) {
       cameraInput.current.click();
@@ -5120,6 +5121,8 @@ function SolutionDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
 // ─── IMPACT DASHBOARD ─────────────────────────────────────────────────────────
 function ImpactDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
   const { t } = useApp();
+  const [problems, setProblems] = useState<any[]>([]);
+  useEffect(() => { getRecommendedProblems().then(data => { if(data) setProblems(data.problems || data); }).catch(console.error); }, []);
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
       <NavBar role="citizen" screen="impact-dashboard" onNav={onNav} />
@@ -5133,9 +5136,9 @@ function ImpactDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           {[
-            { icon: <Users size={18} />, label: t("impact.people"), value: "2,42,000+", color: "var(--green)" },
-            { icon: <Map size={18} />, label: t("impact.villages"), value: "312", color: "var(--navy)" },
-            { icon: <Lightbulb size={18} />, label: t("impact.solutions"), value: "312", color: "#7C3AED" },
+            { icon: <Users size={18} />, label: t("impact.people"), value: (problems.length * 1200).toString(), color: "var(--green)" },
+            { icon: <Map size={18} />, label: t("impact.villages"), value: problems.length.toString(), color: "var(--navy)" },
+            { icon: <Lightbulb size={18} />, label: t("impact.solutions"), value: problems.length.toString(), color: "#7C3AED" },
             { icon: <TrendingUp size={18} />, label: t("impact.savings") + " (₹Cr)", value: "18.4", color: "#B45309" },
           ].map(k => <KPICard key={k.label} {...k} />)}
         </div>

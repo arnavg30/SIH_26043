@@ -5,6 +5,7 @@ export type MitraSize = "full" | "medium" | "compact";
 export type MitraVariant = "welcome" | "guide" | "listening" | "location" | "review" | "success" | "compact" | "dashboard";
 
 interface MitraAssistantProps {
+  badgeText?: string;
   size?: MitraSize;
   variant?: MitraVariant;
   message?: string;
