@@ -36,13 +36,13 @@ interface AppCtx {
   t: (key: string) => string;
   role: string;
   setRole: (r: string) => void;
-  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; audioDurationSeconds: number; latitude: string; longitude: string; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string; aiAnalysis: any };
+  report: { description: string; category: string; categoryId: string; evidence: string; files: File[]; previews: string[]; audioDurationSeconds: number; latitude: string; longitude: string; district: string; block: string; panchayat: string; village: string; locationMethod: string; problemCode: string; aiAnalysis: any; impactReport: any };
   setReport: React.Dispatch<React.SetStateAction<AppCtx["report"]>>;
 }
 const Ctx = createContext<AppCtx>({
   lang: "en", setLang: () => {}, dark: false, setDark: () => {}, t: (k) => k,
   role: "citizen", setRole: () => {},
-  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null }, setReport: () => {},
+  report: { description: "", category: "", categoryId: "", evidence: "", files: [], previews: [], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null, impactReport: null }, setReport: () => {},
 });
 const useApp = () => useContext(Ctx);
 const isValidMobile = (value: string) => /^\d{10}$/.test(value.replace(/\D/g, ""));
@@ -4426,9 +4426,11 @@ function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 
 function UniChallengeDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
+  const { t, report } = useApp();
+  const [showSolutionModal, setShowSolutionModal] = useState(false);
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <SolutionModal isOpen={showSolutionModal} onClose={() => setShowSolutionModal(false)} problemCode={report.problemCode} />
       <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
         <button onClick={() => onNav("uni-dashboard")} className="text-xs flex items-center gap-1 mb-4"
@@ -4488,8 +4490,8 @@ function UniChallengeDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
                 </div>
               </div>
             </Card>
-            <Btn onClick={() => onNav("team-formation")} className="w-full" icon={<CheckCircle size={16} />}>
-              {t("uni.accept")}
+            <Btn onClick={() => setShowSolutionModal(true)} className="w-full" icon={<CheckCircle size={16} />}>
+              Submit AI Solution
             </Btn>
             <Btn variant="secondary" onClick={() => onNav("team-formation")} className="w-full" icon={<FileText size={16} />}>
               Project Scoping
@@ -4634,7 +4636,7 @@ function ProposalScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
 // ─── PROJECT LIFECYCLE ────────────────────────────────────────────────────────
 function ProjectLifecycleScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
+  const { t, report, setReport } = useApp();
   const milestones = [
     { label: "Research & Survey", date: "Sep 1–7", done: true },
     { label: "Prototype Design", date: "Sep 8–15", done: true },
@@ -4644,6 +4646,7 @@ function ProjectLifecycleScreen({ onNav }: { onNav: (s: Screen) => void }) {
   ];
   return (
     <div className="min-h-screen pb-10" style={{ background: "var(--bg)" }}>
+      {report?.impactReport && <ImpactReportModal isOpen={!!report.impactReport} onClose={() => setReport(curr => ({...curr, impactReport: null}))} reportData={report.impactReport} />}
       <NavBar role="university" screen="project-lifecycle" onNav={onNav} />
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         <Card className="p-5">
@@ -4724,6 +4727,21 @@ function ProjectLifecycleScreen({ onNav }: { onNav: (s: Screen) => void }) {
             <Card className="p-5">
               <h3 className="font-bold text-sm mb-3" style={{ color: "var(--text)" }}>Project Actions</h3>
               <div className="space-y-3">
+                <Btn className="w-full" variant="success" icon={<CheckCircle size={16} />}
+                     onClick={async () => {
+                       try {
+                         const { markSolved } = await import("./api");
+                         const res = await markSolved("JH-WTR-1024");
+                         if (res && res.report) {
+                           setReport(curr => ({ ...curr, impactReport: res.report }));
+                           alert("Solved! " + res.message);
+                         }
+                       } catch(e) {
+                         alert("Error marking as solved: " + e);
+                       }
+                     }}>
+                  Mark as Solved
+                </Btn>
                 <Btn className="w-full" icon={<Activity size={16} />}>{t("proj.update")}</Btn>
                 <Btn variant="secondary" className="w-full" onClick={() => onNav("project-health")} icon={<TrendingUp size={16} />}>
                   {t("proj.view_progress")}
@@ -5046,9 +5064,11 @@ function SolutionModal({ isOpen, onClose, problemCode }: { isOpen: boolean; onCl
 }
 
 function IndustryProjectDetailScreen({ onNav }: { onNav: (s: Screen) => void }) {
-  const { t } = useApp();
+  const { t, report } = useApp();
+  const [showSolutionModal, setShowSolutionModal] = useState(false);
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <SolutionModal isOpen={showSolutionModal} onClose={() => setShowSolutionModal(false)} problemCode={report.problemCode} />
       <NavBar role="industry" screen="industry-dashboard" onNav={onNav} />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
         <button onClick={() => onNav("industry-dashboard")} className="text-xs flex items-center gap-1 mb-4"
@@ -5082,8 +5102,8 @@ function IndustryProjectDetailScreen({ onNav }: { onNav: (s: Screen) => void }) 
                 ))}
               </div>
             </Card>
-            <Btn onClick={() => onNav("partnership-form")} className="w-full" icon={<Users size={16} />}>
-              {t("ind.mentorship")}
+            <Btn onClick={() => setShowSolutionModal(true)} className="w-full" icon={<Users size={16} />}>
+              Submit AI Solution
             </Btn>
             <Btn variant="secondary" className="w-full" icon={<TrendingUp size={16} />}>{t("ind.funding")}</Btn>
             <Btn variant="ghost" className="w-full" icon={<Briefcase size={16} />}>Co-Develop</Btn>
@@ -6341,7 +6361,7 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
   const [screen, setScreen] = useState<Screen>(() => (localStorage.getItem("active_screen") as Screen) || "landing");
   const [role, setRole] = useState("citizen");
-  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null as any });
+  const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null as any, impactReport: null as any });
   // On initial website load, show language selection popup, followed immediately by Mitra full-body welcome
   const [showLangModal, setShowLangModal] = useState(() => !localStorage.getItem("jsic_lang"));
   const [showMitraWelcome, setShowMitraWelcome] = useState(false);
