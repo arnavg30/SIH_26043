@@ -8,6 +8,7 @@ export async function apiFetch(
   endpoint: string,
   options: RequestInit = {}
 ) {
+  await auth.authStateReady();
   const user = auth.currentUser;
 
   if (!user) {
@@ -211,6 +212,7 @@ export async function checkEmailExists(email: string) {
 export async function transcribeAudio(audioFile: File) {
   const formData = new FormData();
   formData.append("audio", audioFile);
+  await auth.authStateReady();
   const token = await auth.currentUser?.getIdToken();
   const res = await fetch("/api/transcribe", {
     method: "POST",
