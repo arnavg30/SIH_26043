@@ -1720,13 +1720,14 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
     ? t("mitra.dash.greeting").replace("{name}", profile.name)
     : t("mitra.dash.greeting.generic");
   const statuses = [
-    { icon: <SendHorizontal size={20} />, val: problems.length.toString(), key: "cit.submitted", color: "#1D4ED8" },
+    { icon: <SendHorizontal size={20} />, val: problems.filter((p: any) => p.status === "SUBMITTED").length.toString(), key: "cit.submitted", color: "#1D4ED8" },
     { icon: <Clock size={20} />, val: problems.filter((p: any) => p.status === "PENDING").length.toString(), key: "cit.underreview", color: "var(--warning)" },
     { icon: <Activity size={20} />, val: problems.filter((p: any) => p.status === "IN_PROGRESS" || p.status === "ASSIGNED").length.toString(), key: "cit.inprogress", color: "var(--green)" },
     { icon: <CheckCircle size={20} />, val: problems.filter((p: any) => p.status === "SOLVED").length.toString(), key: "cit.resolved", color: "var(--success)" },
   ];
   if (selectedFilter) {
     let fp = problems;
+    if (selectedFilter.filterStr === "SUBMITTED") fp = problems.filter(p => p.status === "SUBMITTED");
     if (selectedFilter.filterStr === "PENDING") fp = problems.filter(p => p.status === "PENDING");
     if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED");
     if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
@@ -1781,7 +1782,7 @@ function CitizenDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
         {/* Status grid */}
         <div className="grid grid-cols-2 gap-3 mb-5">
           {statuses.map(s => (
-            <Card key={s.key} className="p-3 flex items-center gap-3 cursor-pointer hover:scale-95 transition-all" onClick={() => setSelectedFilter({ title: t(s.key), color: s.color, filterStr: s.key === "cit.submitted" || s.key === "org.recommended" || s.key === "uni.recommended" ? "ALL" : s.key === "cit.underreview" || s.key === "org.collabs" || s.key === "uni.active" ? "PENDING" : s.key === "cit.inprogress" || s.key === "org.collabs" || s.key === "uni.active" ? "IN_PROGRESS" : "SOLVED" })}>
+            <Card key={s.key} className="p-3 flex items-center gap-3 cursor-pointer hover:scale-95 transition-all" onClick={() => setSelectedFilter({ title: t(s.key), color: s.color, filterStr: s.key === "cit.submitted" ? "SUBMITTED" : s.key === "org.recommended" || s.key === "uni.recommended" ? "ALL" : s.key === "cit.underreview" || s.key === "org.collabs" || s.key === "uni.active" ? "PENDING" : s.key === "cit.inprogress" || s.key === "org.collabs" || s.key === "uni.active" ? "IN_PROGRESS" : "SOLVED" })}>
               <div className="w-10 h-10 rounded-xl flex items-center justify-center"
                 style={{ background: `color-mix(in srgb, ${s.color} 12%, transparent)`, color: s.color }}>
                 {s.icon}
@@ -1858,6 +1859,7 @@ function PanchayatDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
   if (selectedFilter) {
     let fp = problems;
+    if (selectedFilter.filterStr === "SUBMITTED") fp = problems.filter(p => p.status === "SUBMITTED");
     if (selectedFilter.filterStr === "PENDING") fp = problems.filter(p => p.status === "PENDING");
     if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED");
     if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
@@ -1961,6 +1963,7 @@ function OrgVictimDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
 
   if (selectedFilter) {
     let fp = problems;
+    if (selectedFilter.filterStr === "SUBMITTED") fp = problems.filter(p => p.status === "SUBMITTED");
     if (selectedFilter.filterStr === "PENDING") fp = problems.filter(p => p.status === "PENDING");
     if (selectedFilter.filterStr === "IN_PROGRESS") fp = problems.filter(p => p.status === "IN_PROGRESS" || p.status === "ASSIGNED");
     if (selectedFilter.filterStr === "SOLVED") fp = problems.filter(p => p.status === "SOLVED");
@@ -6270,10 +6273,7 @@ function FilteredProblemsList({ title, color, problems, onBack, onNav }: { title
                 </div>
                 <h3 className="font-bold mb-1" style={{ color: "var(--text)", paddingRight: 80 }}>{p.title || p.description?.substring(0, 30)}</h3>
                 <p className="text-xs mb-3 line-clamp-2" style={{ color: "var(--text-muted)" }}>{p.description}</p>
-                <Btn variant="secondary" className="w-full text-xs" onClick={() => {
-                   // Usually navigating to detail screen needs saving problem code
-                   // We don't have problem code nav here easily, just basic view
-                }}>View Details</Btn>
+                
               </Card>
             ))}
           </div>
@@ -6286,18 +6286,27 @@ function FilteredProblemsList({ title, color, problems, onBack, onNav }: { title
 export default function App() {
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("jsic_lang") as Lang) || "en");
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
-  const [screen, setScreen] = useState<Screen>("landing");
+  const [screen, setScreen] = useState<Screen>(() => (localStorage.getItem("active_screen") as Screen) || "landing");
   const [role, setRole] = useState("citizen");
   const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "" });
   // On initial website load, show language selection popup, followed immediately by Mitra full-body welcome
-  const [showLangModal, setShowLangModal] = useState(true);
+  const [showLangModal, setShowLangModal] = useState(() => !localStorage.getItem("jsic_lang"));
   const [showMitraWelcome, setShowMitraWelcome] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => setInitialLoading(false), 500);
-    return () => clearTimeout(timer);
+      let unsubscribe = () => {};
+      import("./firebase/config").then(({ auth }) => {
+        unsubscribe = auth.onAuthStateChanged(user => {
+          if (!user) {
+            setScreen("landing");
+            localStorage.removeItem("active_screen");
+          }
+        });
+      });
+      return () => { clearTimeout(timer); unsubscribe(); };
   }, []);
 
   const t = makeT(lang);
