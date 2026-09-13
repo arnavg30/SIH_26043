@@ -6303,8 +6303,9 @@ function FilteredProblemsList({ title, color, problems, onBack, onNav }: { title
 export default function App() {
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("jsic_lang") as Lang) || "en");
   const [dark, setDark] = useState(() => localStorage.getItem("jsic_dark") === "1");
-  const [screen, setScreen] = useState<Screen>(() => (localStorage.getItem("active_screen") as Screen) || "landing");
+  const [screen, setScreen] = useState<Screen>("landing");
   const [role, setRole] = useState("citizen");
+  const [authChecked, setAuthChecked] = useState(false);
   const [report, setReport] = useState({ description: "", category: "", categoryId: "", evidence: "", files: [] as File[], previews: [] as string[], audioDurationSeconds: 0, latitude: "", longitude: "", district: "", block: "", panchayat: "", village: "", locationMethod: "", problemCode: "", aiAnalysis: null as any, impactReport: null as any, status: undefined as string | undefined });
   // On initial website load, show language selection popup, followed immediately by Mitra full-body welcome
   const [showLangModal, setShowLangModal] = useState(() => !localStorage.getItem("jsic_lang"));
@@ -6314,16 +6315,56 @@ export default function App() {
 
   useEffect(() => {
     const timer = setTimeout(() => setInitialLoading(false), 500);
-      let unsubscribe = () => {};
-      import("./firebase/config").then(({ auth }) => {
-        unsubscribe = auth.onAuthStateChanged(user => {
-          if (!user) {
-            setScreen("landing");
-            localStorage.removeItem("active_screen");
-          }
-        });
+    let unsubscribe = () => {};
+    import("./firebase/config").then(({ auth }) => {
+      unsubscribe = auth.onAuthStateChanged(user => {
+        if (!user) {
+          setRole("citizen");
+          setScreen("landing");
+          sessionStorage.removeItem("active_screen");
+          sessionStorage.removeItem("active_role");
+          localStorage.removeItem("active_screen"); // Clear legacy
+          setAuthChecked(true);
+        } else {
+          import("./api").then(({ getProfileMe }) => {
+            getProfileMe().then(data => {
+              const st = data?.user?.sub_type;
+              let r = "citizen";
+              if (st === "PANCHAYAT") r = "panchayat";
+              else if (st === "LOCAL_ORG") r = "localorg";
+              else if (st === "ORGANIZATION") r = "org-solver";
+              else if (st === "INDUSTRY") r = "industry";
+              else if (st === "UNIVERSITY") r = "university";
+              
+              setRole(r);
+              sessionStorage.setItem("active_role", r);
+              
+              const sessionScreen = sessionStorage.getItem("active_screen") as Screen;
+              if (sessionScreen && sessionScreen !== "landing") {
+                setScreen(sessionScreen);
+              } else {
+                const home = getHomeDashboard(r);
+                setScreen(home);
+                sessionStorage.setItem("active_screen", home);
+              }
+              setAuthChecked(true);
+            }).catch(err => {
+              console.error(err);
+              const sr = sessionStorage.getItem("active_role") || "citizen";
+              setRole(sr);
+              const ss = sessionStorage.getItem("active_screen") as Screen;
+              if (ss && ss !== "landing") {
+                setScreen(ss);
+              } else {
+                setScreen(getHomeDashboard(sr));
+              }
+              setAuthChecked(true);
+            });
+          });
+        }
       });
-      return () => { clearTimeout(timer); unsubscribe(); };
+    });
+    return () => { clearTimeout(timer); unsubscribe(); };
   }, []);
 
   const t = makeT(lang);
@@ -6341,11 +6382,15 @@ export default function App() {
       "industry-login": "industry", "industry-dashboard": "industry",
       "org-solver-login": "org-solver", "org-solver-dashboard": "org-solver",
     };
-    if (roleMap[s]) setRole(roleMap[s]!);
+    if (roleMap[s]) {
+      setRole(roleMap[s]!);
+      sessionStorage.setItem("active_role", roleMap[s]!);
+    }
     setTimeout(() => {
       setScreen(s);
-        localStorage.setItem("active_screen", s);
-        window.scrollTo(0, 0);
+      sessionStorage.setItem("active_screen", s);
+      localStorage.removeItem("active_screen");
+      window.scrollTo(0, 0);
       setLoading(false);
     }, 450);
   };
@@ -6356,8 +6401,10 @@ export default function App() {
     <Ctx.Provider value={{ lang, setLang: setLangAndSave, dark, setDark: setDarkAndSave, t, role, setRole, report, setReport }}>
       <div className={dark ? "dark" : ""} style={{ minHeight: "100%", background: "var(--bg)", color: "var(--text)" }}>
         {/* Global NavJhar Rotating Loading Overlay */}
-        <NavJharLoadingOverlay show={loading || initialLoading} />
+        <NavJharLoadingOverlay show={loading || initialLoading || !authChecked} />
 
+        {authChecked && (
+          <>
         {/* Language modal — blocks entry on first visit */}
         {showLangModal && (
           <LanguageModal onDone={(l) => {
@@ -6410,6 +6457,8 @@ export default function App() {
         {screen === "notifications" && <NotificationsScreen {...props} role={role} />}
         {screen === "profile" && <ProfileScreen {...props} role={role} />}
         {screen === "feedback" && <FeedbackScreen {...props} />}
+          </>
+        )}
       </div>
     </Ctx.Provider>
   );
