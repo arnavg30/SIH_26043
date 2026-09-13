@@ -6327,7 +6327,8 @@ export default function App() {
     if (roleMap[s]) setRole(roleMap[s]!);
     setTimeout(() => {
       setScreen(s);
-      window.scrollTo(0, 0);
+        localStorage.setItem("active_screen", s);
+        window.scrollTo(0, 0);
       setLoading(false);
     }, 450);
   };
