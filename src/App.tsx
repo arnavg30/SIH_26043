@@ -1102,7 +1102,9 @@ function OTPLoginScreen({ title, icon, onSuccess, onBack, profileType = "citizen
     setLoading(true);
     try {
       if (authMode === "signup") {
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
+          const { checkEmailExists } = await import("./api");
+          await checkEmailExists(email.trim());
+          await createUserWithEmailAndPassword(auth, email.trim(), password);
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
@@ -2060,7 +2062,9 @@ function OrgSolverLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
     setLoading(true);
     try {
       if (authMode === "signup") {
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
+          const { checkEmailExists } = await import("./api");
+          await checkEmailExists(email.trim());
+          await createUserWithEmailAndPassword(auth, email.trim(), password);
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
@@ -2402,7 +2406,9 @@ function UniLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
     setLoading(true);
     try {
       if (authMode === "signup") {
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
+          const { checkEmailExists } = await import("./api");
+          await checkEmailExists(email.trim());
+          await createUserWithEmailAndPassword(auth, email.trim(), password);
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
@@ -2662,7 +2668,9 @@ function IndustryLoginScreen({ onNav }: { onNav: (s: Screen) => void }) {
     setLoading(true);
     try {
       if (authMode === "signup") {
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
+          const { checkEmailExists } = await import("./api");
+          await checkEmailExists(email.trim());
+          await createUserWithEmailAndPassword(auth, email.trim(), password);
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }

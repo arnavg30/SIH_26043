@@ -1,12 +1,31 @@
 <!doctype html>
 <html lang="<!-- figma:lang -->">
   <head>
+<script>
+  window.onerror = function(msg, url, lineNo, columnNo, error) {
+    document.body.innerHTML += '<div style="position:fixed;top:0;left:0;width:100%;background:red;color:white;z-index:999999;padding:20px;font-family:monospace;"><b>Global Error:</b><br>' + msg + '<br>Line: ' + lineNo + '<br>Url: ' + url + '<br>' + (error && error.stack ? error.stack.replace(/\n/g, '<br>') : '') + '</div>';
+    return false;
+  };
+  window.addEventListener('unhandledrejection', function(event) {
+    document.body.innerHTML += '<div style="position:fixed;top:0;left:0;width:100%;background:red;color:white;z-index:999999;padding:20px;font-family:monospace;"><b>Unhandled Promise Rejection:</b><br>' + (event.reason && event.reason.stack ? event.reason.stack.replace(/\n/g, '<br>') : event.reason) + '</div>';
+  });
+</script>
+
     <!-- figma:head-start -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title><!-- figma:title --></title>
     <!-- figma:head-end -->
-  </head>
+  
+<script>
+  if (!sessionStorage.getItem("has_reset_once")) {
+    localStorage.removeItem("jsic_screen");
+    localStorage.removeItem("jsic_role");
+    sessionStorage.setItem("has_reset_once", "true");
+    console.log("Reset local storage for this session.");
+  }
+</script>
+</head>
   <body>
     <!-- figma:body-start -->
     <div id="root"></div>

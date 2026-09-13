@@ -131,6 +131,25 @@ app.get("/api/health", async (req, res) => {
 
 // ---------------- Authentication / user sync ----------------
 // Firebase remains the source of authentication. PostgreSQL stores application identity/profile.
+
+app.post("/api/auth/check-email", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email required" });
+    const existing = await pool.query("SELECT sub_type FROM users WHERE email = $1 LIMIT 1", [email]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ 
+        exists: true, 
+        role: existing.rows[0].sub_type,
+        message: `Yeh email pehle se '${existing.rows[0].sub_type}' ke roop mein registered hai. Ek email sirf ek role ke liye use ho sakta hai.` 
+      });
+    }
+    res.json({ exists: false });
+  } catch(err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 app.post("/api/auth/sync", verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {

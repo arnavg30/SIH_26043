@@ -1,0 +1,99 @@
+function IndustryDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t, setReport } = useApp();
+  const profile = useProfileDisplay("industry");
+  const [problems, setProblems] = useState<any[]>([]);
+
+  useEffect(() => {
+    import("./firebase/config").then(({ auth }) => {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (user) {
+          getRecommendedProblems().then(data => {
+            setProblems(data.problems || []);
+          }).catch(console.error);
+        }
+      });
+      return () => unsubscribe();
+    });
+  }, []);
+
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role="industry" screen="industry-dashboard" onNav={onNav} />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
+              <Factory size={22} /> {t("ind.dashboard")}
+            </h1>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{profile.name || "Industry Partner"}{profile.detail ? \ — \\ : ""}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          {[
+            { icon: <Bell size={18} />, label: "Recommended Projects", value: problems.length.toString(), color: "var(--amber)" },
+            { icon: <Users size={18} />, label: "Active Partnerships", value: "0", color: "var(--green)" },
+            { icon: <GraduationCap size={18} />, label: "Mentorship", value: "0", color: "var(--navy)" },
+            { icon: <TrendingUp size={18} />, label: "CSR Funding (?L)", value: "0", color: "#7C3AED" },
+          ].map(k => <KPICard key={k.label} {...k} />)}
+        </div>
+
+        <h2 className="font-bold text-sm mb-4 flex items-center gap-2" style={{ color: "var(--text)" }}>
+          <Lightbulb size={16} /> Recommended Projects
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {problems.map((p, i) => (
+            <Card key={i} className="p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{p.description || p.title || "Citizen Report"}</h3>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{p.category_name} • {p.district}</p>
+                </div>
+                <div className="text-right">
+                  <div className="font-black text-2xl" style={{ color: "var(--success)" }}>{p.priority_score || 85}%</div>
+                  <div className="text-xs" style={{ color: "var(--text-muted)" }}>Match</div>
+                </div>
+              </div>
+              <div className="mb-3 space-y-1">
+                  <p className="text-xs flex items-center gap-1.5" style={{ color: "var(--success)" }}>
+                    <CheckCircle size={11} /> High Priority Issue
+                  </p>
+                  <p className="text-xs flex items-center gap-1.5" style={{ color: "var(--success)" }}>
+                    <CheckCircle size={11} /> {p.category_name} domain
+                  </p>
+              </div>
+              <div className="flex gap-2 mt-4 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
+                <Btn variant="secondary" className="flex-1" icon={<Eye size={16} />} onClick={() => {
+                  setReport(curr => ({
+                    ...curr,
+                    problemCode: p.problem_code,
+                    status: p.status,
+                    description: p.description,
+                    category: p.category_name,
+                    district: p.district,
+                    block: p.block,
+                    panchayat: p.panchayat_ward,
+                    village: p.village,
+                    aiData: { category: p.category_name, priorityScore: p.priority_score }
+                  }));
+                  onNav("industry-project-detail");
+                }}>
+                  View
+                </Btn>
+                <Btn className="flex-1" icon={<Users size={16} />} onClick={async () => {
+                   await acceptProblem(p.problem_code);
+                   alert("You have collaborated on this project. The status is now IN PROGRESS!");
+                   getRecommendedProblems().then(data => setProblems(data.problems || []));
+                }}>
+                  Collaborate
+                </Btn>
+              </div>
+            </Card>
+          ))}
+          {problems.length === 0 && (
+            <p className="text-xs col-span-2 text-center py-5" style={{ color: "var(--text-muted)" }}>No recommended projects found right now.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

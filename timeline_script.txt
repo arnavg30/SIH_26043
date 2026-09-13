@@ -1,0 +1,33 @@
+  const statusStr = (report.status || "Submitted").toUpperCase();
+  let govDone = false, govActive = false;
+  let uniDone = false, uniActive = false;
+  let devDone = false, devActive = false;
+  let impDone = false, impActive = false;
+  let feedDone = false, feedActive = false;
+
+  if (statusStr === "SUBMITTED") {
+    govActive = true;
+  } else if (statusStr === "UNDER REVIEW") {
+    govDone = true;
+    uniActive = true;
+  } else if (statusStr === "IN PROGRESS") {
+    govDone = true;
+    uniDone = true;
+    devActive = true;
+  } else if (statusStr === "RESOLVED") {
+    govDone = true;
+    uniDone = true;
+    devDone = true;
+    impDone = true;
+    feedActive = true;
+  }
+
+  const timeline = [
+    { label: "Challenge Submitted", sub: \Submitted on \\, done: true },
+    { label: "AI Processed", sub: \\ • Priority: \/100\, done: true },
+    { label: "Government Verification", sub: govDone ? \\ (Verified & Approved)\ : govActive ? "Verifying..." : "Pending", done: govDone, active: govActive, pending: !govDone && !govActive },
+    { label: "University / Solver Matching", sub: uniDone ? "Solver Assigned" : uniActive ? "Searching for the best compatible solver..." : "Pending", done: uniDone, active: uniActive, pending: !uniDone && !uniActive },
+    { label: "Development & Testing", sub: devDone ? "Completed" : devActive ? "In Progress" : "Pending", done: devDone, active: devActive, pending: !devDone && !devActive },
+    { label: "Implementation", sub: impDone ? "Completed" : impActive ? "Implementing..." : "Pending", done: impDone, active: impActive, pending: !impDone && !impActive },
+    { label: "Citizen Feedback", sub: feedDone ? "Feedback Received" : feedActive ? "Awaiting your feedback" : "Pending", done: feedDone, active: feedActive, pending: !feedDone && !feedActive }
+  ];

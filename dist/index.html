@@ -1,21 +1,40 @@
 <!doctype html>
 <html lang="en">
   <head>
+<script>
+  window.onerror = function(msg, url, lineNo, columnNo, error) {
+    document.body.innerHTML += '<div style="position:fixed;top:0;left:0;width:100%;background:red;color:white;z-index:999999;padding:20px;font-family:monospace;"><b>Global Error:</b><br>' + msg + '<br>Line: ' + lineNo + '<br>Url: ' + url + '<br>' + (error && error.stack ? error.stack.replace(/\n/g, '<br>') : '') + '</div>';
+    return false;
+  };
+  window.addEventListener('unhandledrejection', function(event) {
+    document.body.innerHTML += '<div style="position:fixed;top:0;left:0;width:100%;background:red;color:white;z-index:999999;padding:20px;font-family:monospace;"><b>Unhandled Promise Rejection:</b><br>' + (event.reason && event.reason.stack ? event.reason.stack.replace(/\n/g, '<br>') : event.reason) + '</div>';
+  });
+</script>
+
     
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Figma Make App</title>
     
-    <meta name="description" content="Connects Jharkhand citizens with government and educational institutions to report societal issues, fostering innovative solutions and community engagement.">
-    <meta name="robots" content="noindex, nofollow">
-    <meta property="og:title" content="Figma Make App">
-    <meta property="og:description" content="Connects Jharkhand citizens with government and educational institutions to report societal issues, fostering innovative solutions and community engagement.">
-    <script type="module" crossorigin src="/assets/index-q9ojwDoD.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-D31HUTtq.css">
-  </head>
+  
+<script>
+  if (!sessionStorage.getItem("has_reset_once")) {
+    localStorage.removeItem("jsic_screen");
+    localStorage.removeItem("jsic_role");
+    sessionStorage.setItem("has_reset_once", "true");
+    console.log("Reset local storage for this session.");
+  }
+</script>
+  <meta name="description" content="Connects Jharkhand citizens with government and educational institutions to report societal issues, fostering innovative solutions and community engagement.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta property="og:title" content="Figma Make App">
+  <meta property="og:description" content="Connects Jharkhand citizens with government and educational institutions to report societal issues, fostering innovative solutions and community engagement.">
+  <script type="module" crossorigin src="/assets/index-BVMw7Hhj.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DnHMvCVO.css">
+</head>
   <body>
     
-    <div id="root"></div>
+    <div id="root"></div>
     
   </body>
 </html>

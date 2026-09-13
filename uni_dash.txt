@@ -1,0 +1,99 @@
+function UniDashboardScreen({ onNav }: { onNav: (s: Screen) => void }) {
+  const { t, setReport } = useApp();
+  const profile = useProfileDisplay("university");
+  const [problems, setProblems] = useState<any[]>([]);
+
+  useEffect(() => {
+    import("./firebase/config").then(({ auth }) => {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (user) {
+          getRecommendedProblems().then(data => {
+            setProblems(data.problems || []);
+          }).catch(console.error);
+        }
+      });
+      return () => unsubscribe();
+    });
+  }, []);
+
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      <NavBar role="university" screen="uni-dashboard" onNav={onNav} />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-black flex items-center gap-2" style={{ color: "var(--navy)" }}>
+              <GraduationCap size={22} /> {profile.name || t("uni.dashboard")}
+            </h1>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Innovation Partner</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+          {[
+            { icon: <Bell size={18} />, label: "New Challenges", value: problems.length.toString(), color: "var(--amber)" },
+            { icon: <CheckCircle size={18} />, label: "Accepted", value: "0", color: "var(--green)" },
+            { icon: <Activity size={18} />, label: "Active Projects", value: "0", color: "var(--navy)" },
+            { icon: <ThumbsUp size={18} />, label: "Completed", value: "0", color: "var(--success)" },
+            { icon: <AlertTriangle size={18} />, label: "At Risk", value: "0", color: "var(--error)" },
+          ].map(k => <KPICard key={k.label} {...k} />)}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {problems.map((c, i) => (
+            <Card key={i} className="p-5">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1">
+                  <h3 className="font-bold text-sm" style={{ color: "var(--text)" }}>{c.description || c.title || "Citizen Report"}</h3>
+                  <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
+                    <MapPin size={11} /> {c.district || "Map-selected location"}
+                  </p>
+                </div>
+                <StatusBadge status="new" />
+              </div>
+              <div className="flex gap-2 mb-3 flex-wrap">
+                <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "#EFF6FF", color: "#1D4ED8" }}>{c.category_name}</span>
+                <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: "var(--success-bg)", color: "var(--success)" }}>
+                  <Users size={10} className="inline mr-0.5" />High Impact
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1">
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>AI Match</p>
+                  <p className="text-sm font-black" style={{ color: "var(--success)" }}>{c.priority_score || 85}%</p>
+                </div>
+              </div>
+              <div className="flex gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                <Btn variant="secondary" className="flex-1 text-xs py-2" onClick={() => {
+                  setReport(curr => ({
+                    ...curr,
+                    problemCode: c.problem_code,
+                    status: c.status,
+                    description: c.description,
+                    category: c.category_name,
+                    district: c.district,
+                    block: c.block,
+                    panchayat: c.panchayat_ward,
+                    village: c.village,
+                    aiData: { category: c.category_name, priorityScore: c.priority_score }
+                  }));
+                  onNav("uni-challenge-detail");
+                }}>
+                  View Details
+                </Btn>
+                <Btn className="flex-1 text-xs py-2" onClick={async () => {
+                   await acceptProblem(c.problem_code);
+                   alert("You have accepted this challenge. The status is now IN PROGRESS!");
+                   getRecommendedProblems().then(data => setProblems(data.problems || []));
+                }}>
+                  Accept
+                </Btn>
+              </div>
+            </Card>
+          ))}
+          {problems.length === 0 && (
+             <p className="text-xs col-span-2 text-center py-5" style={{ color: "var(--text-muted)" }}>No new challenges found right now.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

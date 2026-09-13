@@ -1,0 +1,16 @@
+    let aiExpertise = domainExpertise;
+    if (domainExpertise) {
+      try {
+        const aiRes = await fetch('http://127.0.0.1:8000/categorize-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: domainExpertise })
+        });
+        const aiData = await aiRes.json();
+        if (aiData && aiData.expertise && Array.isArray(aiData.expertise)) {
+          aiExpertise = aiData.expertise.join(', ');
+        }
+      } catch (e) {
+        console.error('AI Profile categorization failed:', e);
+      }
+    }
