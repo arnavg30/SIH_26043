@@ -3144,7 +3144,33 @@ function ReportStep1Screen({ onNav }: { onNav: (s: Screen) => void }) {
                   <Mic size={30} color="white" />
                 </button>
                 <p className="text-sm font-semibold" style={{ color: "var(--green)" }}>{recordedAudio ? "Record again" : t("rep.step1.tap_to_speak")}</p>
-                {recordedAudio && <RecordedAudioPlayer file={recordedAudio} />}
+                {recordedAudio && (
+                  <>
+                    <RecordedAudioPlayer file={recordedAudio} />
+                    <button
+                      onClick={async () => {
+                        setIsTranscribing(true);
+                        try {
+                          const { transcribeAudio } = await import("./api");
+                          const res = await transcribeAudio(recordedAudio);
+                          const data = await res.json();
+                          setDesc(data.text);
+                          setMode("text");
+                        } catch (e: any) {
+                          alert(e.message || "Failed to transcribe");
+                        } finally {
+                          setIsTranscribing(false);
+                        }
+                      }}
+                      disabled={isTranscribing}
+                      className="mt-4 px-4 py-2 rounded-xl text-white font-bold flex items-center justify-center gap-2 mx-auto"
+                      style={{ background: "var(--navy)" }}
+                    >
+                      {isTranscribing && <Loader className="animate-spin" size={16} />}
+                      {isTranscribing ? "Transcribing..." : "Convert to Text"}
+                    </button>
+                  </>
+                )}
                 {!recordedAudio && report.files.length >= 10 && <p className="text-xs mt-2">A report can contain up to 10 attachments.</p>}
                 {recordingError && <p className="text-xs mt-3" style={{ color: "var(--error)" }}>{recordingError}</p>}
               </>
